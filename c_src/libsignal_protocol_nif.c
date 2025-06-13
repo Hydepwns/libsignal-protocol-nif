@@ -1,0 +1,1798 @@
+#include <erl_nif.h>
+#include <string.h>
+#include <openssl/evp.h>
+#include <openssl/rand.h>
+#include <openssl/err.h>
+#include <openssl/ec.h>
+#include <openssl/obj_mac.h>
+#include <openssl/hmac.h>
+#include <openssl/aes.h>
+#include <openssl/bn.h>
+#include <openssl/engine.h>
+#include <openssl/conf.h>
+#include <openssl/crypto.h>
+
+// Constants
+#define MESSAGE_KEY_LEN 32
+#define CHAIN_KEY_LEN 32
+#define ROOT_KEY_LEN 32
+#define MAX_MESSAGE_KEYS 2000
+#define MAX_SKIP_KEYS 100
+#define RATCHET_ROTATION_THRESHOLD 100
+#define CHAIN_KEY_CACHE_SIZE 10
+#define ROOT_KEY_CACHE_SIZE 5
+#define MIN_CHAIN_KEY_CACHE_SIZE 5
+#define MAX_CHAIN_KEY_CACHE_SIZE 20
+#define MIN_ROOT_KEY_CACHE_SIZE 3
+#define MAX_ROOT_KEY_CACHE_SIZE 10
+#define CACHE_GROWTH_FACTOR 1.5
+#define CACHE_SHRINK_FACTOR 0.75
+#define CACHE_HIT_THRESHOLD 0.7
+#define CACHE_MISS_THRESHOLD 0.3
+
+// Forward declarations
+static ERL_NIF_TERM make_error(ErlNifEnv* env, const char* reason);
+static ERL_NIF_TERM make_ok(ErlNifEnv* env, ERL_NIF_TERM value);
+static ERL_NIF_TERM make_binary(ErlNifEnv* env, const unsigned char* data, size_t len);
+
+// Type definitions
+typedef struct {
+    unsigned char key[MESSAGE_KEY_LEN];
+    uint32_t index;
+    uint32_t ratchet_index;
+} message_key_t;
+
+typedef struct {
+    EC_KEY* dh_key;
+    unsigned char chain_key[CHAIN_KEY_LEN];
+    uint32_t chain_index;
+    message_key_t message_keys[MAX_MESSAGE_KEYS];
+    size_t message_key_count;
+    message_key_t skip_keys[MAX_SKIP_KEYS];
+    size_t skip_key_count;
+} ratchet_chain_t;
+
+typedef struct {
+    size_t hits;
+    size_t misses;
+    size_t current_size;
+    size_t max_size;
+    double hit_ratio;
+    size_t last_adjustment;
+} cache_stats_t;
+
+typedef struct {
+    unsigned char chain_key[CHAIN_KEY_LEN];
+    uint32_t index;
+    uint32_t ratchet_index;
+} chain_key_cache_t;
+
+typedef struct {
+    unsigned char root_key[ROOT_KEY_LEN];
+    uint32_t ratchet_index;
+} root_key_cache_t;
+
+typedef struct {
+    ratchet_chain_t sending_chain;
+    ratchet_chain_t receiving_chain;
+    unsigned char root_key[ROOT_KEY_LEN];
+    uint32_t sending_ratchet_index;
+    uint32_t receiving_ratchet_index;
+    chain_key_cache_t* chain_key_cache;
+    size_t chain_key_cache_size;
+    size_t chain_key_cache_count;
+    root_key_cache_t* root_key_cache;
+    size_t root_key_cache_size;
+    size_t root_key_cache_count;
+    cache_stats_t chain_key_stats;
+    cache_stats_t root_key_stats;
+} ratchet_state_t;
+
+// OpenSSL initialization function
+static int init_openssl(void) {
+    // Initialize OpenSSL with all required subsystems
+    if (!OPENSSL_init_crypto(OPENSSL_INIT_ADD_ALL_CIPHERS |
+                            OPENSSL_INIT_ADD_ALL_DIGESTS |
+                            OPENSSL_INIT_LOAD_CONFIG, NULL)) {
+        return 0;
+    }
+
+    // Seed the random number generator with high-quality entropy
+    if (!RAND_status()) {
+        // Try to seed with system entropy
+        if (!RAND_poll()) {
+            return 0;
+        }
+        // Check if we have enough entropy
+        if (!RAND_status()) {
+            return 0;
+        }
+    }
+
+    // Initialize error handling
+    ERR_load_crypto_strings();
+    OpenSSL_add_all_algorithms();
+
+    return 1;
+}
+
+// OpenSSL cleanup function
+static void cleanup_openssl(void) {
+    EVP_cleanup();
+    ERR_free_strings();
+}
+
+// Enhanced error handling function
+static ERL_NIF_TERM make_openssl_error(ErlNifEnv* env) {
+    unsigned long err;
+    char err_buf[256];
+    const char* file;
+    const char* data;
+    int line;
+    int flags;
+
+    err = ERR_get_error_line_data(&file, &line, &data, &flags);
+    if (err) {
+        ERR_error_string_n(err, err_buf, sizeof(err_buf));
+        return make_error(env, err_buf);
+    }
+    return make_error(env, "Unknown OpenSSL error");
+}
+
+// Helper function to check OpenSSL errors
+static int check_openssl_error(ErlNifEnv* env) {
+    unsigned long err = ERR_get_error();
+    if (err) {
+        char err_buf[256];
+        ERR_error_string_n(err, err_buf, sizeof(err_buf));
+        make_error(env, err_buf);
+        return 0;
+    }
+    return 1;
+}
+
+// Key validation constants
+#define MIN_KEY_SIZE 32  // Minimum key size in bytes
+#define MAX_KEY_SIZE 65  // Maximum key size in bytes (uncompressed EC point)
+#define CURVE_NID NID_X9_62_prime256v1  // P-256 curve
+
+// Scrypt parameters
+#define SCRYPT_N 32768
+#define SCRYPT_R 8
+#define SCRYPT_P 1
+
+// Header size: 8 bytes for indices, 65 for uncompressed EC point
+#define HEADER_SIZE (8 + 65)
+
+// Key validation functions
+static int validate_ec_key(EC_KEY* key) {
+    if (!key) {
+        return 0;
+    }
+
+    // Check if key is valid
+    if (!EC_KEY_check_key(key)) {
+        return 0;
+    }
+
+    // Verify curve matches expected curve
+    const EC_GROUP* group = EC_KEY_get0_group(key);
+    if (!group || EC_GROUP_get_curve_name(group) != CURVE_NID) {
+        return 0;
+    }
+
+    // Verify public key is on the curve
+    const EC_POINT* pub = EC_KEY_get0_public_key(key);
+    if (!pub || !EC_POINT_is_on_curve(group, pub, NULL)) {
+        return 0;
+    }
+
+    return 1;
+}
+
+static int validate_public_key_data(const unsigned char* key_data, size_t key_len) {
+    if (!key_data || key_len != MAX_KEY_SIZE) {
+        return 0;
+    }
+
+    // Verify key format (first byte should be 0x04 for uncompressed point)
+    if (key_data[0] != 0x04) {
+        return 0;
+    }
+
+    return 1;
+}
+
+// NIF function declarations
+static ERL_NIF_TERM generate_identity_key_pair(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
+static ERL_NIF_TERM generate_pre_key(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
+static ERL_NIF_TERM generate_signed_pre_key(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
+static ERL_NIF_TERM create_session(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
+static ERL_NIF_TERM process_pre_key_bundle(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
+static ERL_NIF_TERM encrypt_message(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
+static ERL_NIF_TERM decrypt_message(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
+static ERL_NIF_TERM get_cache_stats(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
+static ERL_NIF_TERM reset_cache_stats(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
+static ERL_NIF_TERM set_cache_size(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]);
+
+// NIF function definitions
+static ErlNifFunc nif_funcs[] = {
+    {"generate_identity_key_pair", 0, generate_identity_key_pair},
+    {"generate_pre_key", 1, generate_pre_key},
+    {"generate_signed_pre_key", 2, generate_signed_pre_key},
+    {"create_session", 2, create_session},
+    {"process_pre_key_bundle", 2, process_pre_key_bundle},
+    {"encrypt_message", 2, encrypt_message},
+    {"decrypt_message", 2, decrypt_message},
+    {"get_cache_stats", 1, get_cache_stats},
+    {"reset_cache_stats", 1, reset_cache_stats},
+    {"set_cache_size", 3, set_cache_size}
+};
+
+// Module load callback
+static int on_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info) {
+    if (!init_openssl()) {
+        return -1;
+    }
+    return 0;
+}
+
+// Module unload callback
+static void on_unload(ErlNifEnv* env, void* priv_data) {
+    cleanup_openssl();
+}
+
+// NIF module definition with unload callback
+ERL_NIF_INIT(signal_nif, nif_funcs, on_load, NULL, NULL, on_unload)
+
+// Helper functions
+static ERL_NIF_TERM make_error(ErlNifEnv* env, const char* reason) {
+    return enif_make_tuple2(env,
+        enif_make_atom(env, "error"),
+        enif_make_string(env, reason, ERL_NIF_LATIN1));
+}
+
+static ERL_NIF_TERM make_ok(ErlNifEnv* env, ERL_NIF_TERM value) {
+    return enif_make_tuple2(env,
+        enif_make_atom(env, "ok"),
+        value);
+}
+
+static ERL_NIF_TERM make_binary(ErlNifEnv* env, const unsigned char* data, size_t len) {
+    ERL_NIF_TERM binary;
+    unsigned char* buffer = enif_make_new_binary(env, len, &binary);
+    memcpy(buffer, data, len);
+    return binary;
+}
+
+// Key generation functions
+static int generate_ec_key_pair(EC_KEY** key) {
+    *key = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+    if (!*key) {
+        return 0;
+    }
+    
+    if (!EC_KEY_generate_key(*key)) {
+        EC_KEY_free(*key);
+        *key = NULL;
+        return 0;
+    }
+    
+    return 1;
+}
+
+static ERL_NIF_TERM key_to_binary(ErlNifEnv* env, EC_KEY* key, int is_public) {
+    const EC_POINT* point = EC_KEY_get0_public_key(key);
+    const BIGNUM* bn = EC_KEY_get0_private_key(key);
+    size_t len;
+    unsigned char* buffer;
+    ERL_NIF_TERM binary;
+
+    if (is_public) {
+        len = EC_POINT_point2oct(EC_KEY_get0_group(key), point,
+                               POINT_CONVERSION_UNCOMPRESSED,
+                               NULL, 0, NULL);
+        if (len == 0) {
+            return make_openssl_error(env);
+        }
+        buffer = enif_make_new_binary(env, len, &binary);
+        if (!buffer) {
+            return make_error(env, "Failed to allocate binary");
+        }
+        if (EC_POINT_point2oct(EC_KEY_get0_group(key), point,
+                              POINT_CONVERSION_UNCOMPRESSED,
+                              buffer, len, NULL) != len) {
+            return make_openssl_error(env);
+        }
+    } else {
+        len = BN_num_bytes(bn);
+        buffer = enif_make_new_binary(env, len, &binary);
+        if (!buffer) {
+            return make_error(env, "Failed to allocate binary");
+        }
+        if (BN_bn2bin(bn, buffer) != len) {
+            return make_openssl_error(env);
+        }
+    }
+
+    return binary;
+}
+
+// Cryptographic functions
+static ERL_NIF_TERM sign_data(ErlNifEnv* env, EC_KEY* key, const unsigned char* data, size_t data_len) {
+    ECDSA_SIG* sig = ECDSA_do_sign(data, data_len, key);
+    if (!sig) {
+        return make_openssl_error(env);
+    }
+
+    const BIGNUM* r = ECDSA_SIG_get0_r(sig);
+    const BIGNUM* s = ECDSA_SIG_get0_s(sig);
+    if (!r || !s) {
+        ECDSA_SIG_free(sig);
+        return make_openssl_error(env);
+    }
+
+    size_t r_len = BN_num_bytes(r);
+    size_t s_len = BN_num_bytes(s);
+
+    ERL_NIF_TERM signature;
+    unsigned char* buffer = enif_make_new_binary(env, r_len + s_len, &signature);
+    if (!buffer) {
+        ECDSA_SIG_free(sig);
+        return make_error(env, "Failed to allocate signature buffer");
+    }
+
+    if (BN_bn2bin(r, buffer) != r_len || BN_bn2bin(s, buffer + r_len) != s_len) {
+        ECDSA_SIG_free(sig);
+        return make_openssl_error(env);
+    }
+
+    ECDSA_SIG_free(sig);
+    return signature;
+}
+
+static int verify_signature(EC_KEY* key, const unsigned char* data, size_t data_len,
+                          const unsigned char* signature, size_t sig_len) {
+    if (sig_len % 2 != 0) {
+        return 0;
+    }
+
+    size_t half_len = sig_len / 2;
+    BIGNUM* r = BN_bin2bn(signature, half_len, NULL);
+    BIGNUM* s = BN_bin2bn(signature + half_len, half_len, NULL);
+    if (!r || !s) {
+        if (r) BN_free(r);
+        if (s) BN_free(s);
+        return 0;
+    }
+
+    ECDSA_SIG* sig = ECDSA_SIG_new();
+    if (!sig) {
+        BN_free(r);
+        BN_free(s);
+        return 0;
+    }
+
+    if (!ECDSA_SIG_set0(sig, r, s)) {
+        BN_free(r);
+        BN_free(s);
+        ECDSA_SIG_free(sig);
+        return 0;
+    }
+
+    int result = ECDSA_do_verify(data, data_len, sig, key);
+    ECDSA_SIG_free(sig);
+    return result;
+}
+
+// Key derivation constants
+#define HKDF_INFO_LEN 1
+#define ROOT_KEY_LEN 32
+#define CHAIN_KEY_LEN 32
+#define MESSAGE_KEY_LEN 32
+
+// Forward declarations for static functions
+static void cleanup_message_keys(ratchet_chain_t* chain);
+static void cleanup_skip_keys(ratchet_chain_t* chain);
+static void adjust_cache_size(cache_stats_t* stats, size_t* cache_size);
+static void add_root_key_to_cache(ratchet_state_t* state, const unsigned char* root_key, uint32_t ratchet_index);
+
+// Key derivation functions
+static int derive_root_key(const unsigned char* dh_output, size_t dh_output_len,
+                         const unsigned char* salt, size_t salt_len,
+                         unsigned char* root_key) {
+    const unsigned char info[] = "SignalProtocol";
+    return EVP_PBE_scrypt((const char*)dh_output, dh_output_len, salt, salt_len,
+                         SCRYPT_N, SCRYPT_R, SCRYPT_P, 0, root_key, ROOT_KEY_LEN) == 1;
+}
+
+static int derive_chain_key(const unsigned char* root_key, size_t root_key_len,
+                          const unsigned char* salt, size_t salt_len,
+                          unsigned char* chain_key) {
+    const unsigned char info[] = "ChainKey";
+    return EVP_PBE_scrypt((const char*)root_key, root_key_len, salt, salt_len,
+                         SCRYPT_N, SCRYPT_R, SCRYPT_P, 0, chain_key, CHAIN_KEY_LEN) == 1;
+}
+
+static int derive_message_key(const unsigned char* chain_key, size_t chain_key_len,
+                            const unsigned char* salt, size_t salt_len,
+                            unsigned char* message_key) {
+    const unsigned char info[] = "MessageKey";
+    return EVP_PBE_scrypt((const char*)chain_key, chain_key_len, salt, salt_len,
+                         SCRYPT_N, SCRYPT_R, SCRYPT_P, 0, message_key, MESSAGE_KEY_LEN) == 1;
+}
+
+static int calculate_dh_shared_secret(EC_KEY* our_key, EC_KEY* their_key,
+                                    unsigned char* shared_secret, size_t* shared_secret_len) {
+    const EC_GROUP* group = EC_KEY_get0_group(our_key);
+    const EC_POINT* their_point = EC_KEY_get0_public_key(their_key);
+    const BIGNUM* our_private = EC_KEY_get0_private_key(our_key);
+
+    if (!group || !their_point || !our_private) {
+        return 0;
+    }
+
+    EC_POINT* shared_point = EC_POINT_new(group);
+    if (!shared_point) {
+        return 0;
+    }
+
+    if (EC_POINT_mul(group, shared_point, NULL, their_point, our_private, NULL) != 1) {
+        EC_POINT_free(shared_point);
+        return 0;
+    }
+
+    size_t len = EC_POINT_point2oct(group, shared_point, POINT_CONVERSION_UNCOMPRESSED,
+                                  NULL, 0, NULL);
+    if (len == 0) {
+        EC_POINT_free(shared_point);
+        return 0;
+    }
+
+    if (len > *shared_secret_len) {
+        EC_POINT_free(shared_point);
+        return 0;
+    }
+
+    if (EC_POINT_point2oct(group, shared_point, POINT_CONVERSION_UNCOMPRESSED,
+                          shared_secret, len, NULL) != len) {
+        EC_POINT_free(shared_point);
+        return 0;
+    }
+
+    *shared_secret_len = len;
+    EC_POINT_free(shared_point);
+    return 1;
+}
+
+// Bundle parsing helper functions
+static int parse_uint32(const unsigned char* data, uint32_t* value) {
+    if (!data || !value) return 0;
+    *value = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+    return 1;
+}
+
+static int parse_binary(const unsigned char* data, size_t data_len, size_t* offset,
+                       unsigned char** binary, size_t* binary_len) {
+    if (!data || !offset || !binary || !binary_len || *offset + 4 > data_len) {
+        return 0;
+    }
+
+    uint32_t len;
+    if (!parse_uint32(data + *offset, &len)) {
+        return 0;
+    }
+    *offset += 4;
+
+    if (*offset + len > data_len) {
+        return 0;
+    }
+
+    *binary = (unsigned char*)data + *offset;
+    *binary_len = len;
+    *offset += len;
+    return 1;
+}
+
+// Ratchet constants
+#define MAX_SKIP 1000
+#define MAX_MESSAGE_KEYS 2000
+
+// Message key skipping constants
+#define MAX_SKIP_DISTANCE 1000
+#define MAX_SKIP_KEYS 100
+
+// Message key cleanup constants
+#define MESSAGE_KEY_CLEANUP_THRESHOLD 1000
+#define SKIP_KEY_CLEANUP_THRESHOLD 50
+#define MAX_KEY_AGE 10000
+
+// Ratchet functions
+static int rotate_chain_key(ratchet_chain_t* chain) {
+    // Check if we can use cached chain key
+    if (chain->chain_index + 1 < RATCHET_ROTATION_THRESHOLD) {
+        unsigned char new_chain_key[CHAIN_KEY_LEN];
+        const unsigned char salt[] = "ChainKey";
+        if (!derive_chain_key(chain->chain_key, CHAIN_KEY_LEN,
+                            salt, sizeof(salt), new_chain_key)) {
+            return 0;
+        }
+        memcpy(chain->chain_key, new_chain_key, CHAIN_KEY_LEN);
+        chain->chain_index++;
+        return 1;
+    }
+    return 0;
+}
+
+static int add_message_key(ratchet_chain_t* chain, const unsigned char* message_key) {
+    if (chain->message_key_count >= MAX_MESSAGE_KEYS) {
+        return 0;
+    }
+
+    memcpy(chain->message_keys[chain->message_key_count].key, message_key, MESSAGE_KEY_LEN);
+    chain->message_keys[chain->message_key_count].index = chain->chain_index;
+    chain->message_keys[chain->message_key_count].ratchet_index = chain->chain_index;
+    chain->message_key_count++;
+
+    // Cleanup if we're approaching the limit
+    if (chain->message_key_count >= MESSAGE_KEY_CLEANUP_THRESHOLD) {
+        cleanup_message_keys(chain);
+    }
+
+    return 1;
+}
+
+static int get_message_key(ratchet_chain_t* chain, uint32_t index, unsigned char* message_key) {
+    for (size_t i = 0; i < chain->message_key_count; i++) {
+        if (chain->message_keys[i].index == index) {
+            memcpy(message_key, chain->message_keys[i].key, MESSAGE_KEY_LEN);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int rotate_sending_ratchet(ratchet_state_t* state) {
+    // Generate new DH key pair
+    EC_KEY* new_dh_key = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+    if (!new_dh_key || !EC_KEY_generate_key(new_dh_key)) {
+        if (new_dh_key) EC_KEY_free(new_dh_key);
+        return 0;
+    }
+
+    // Calculate new shared secret
+    unsigned char shared_secret[32];
+    size_t shared_secret_len = sizeof(shared_secret);
+    if (!calculate_dh_shared_secret(new_dh_key, state->receiving_chain.dh_key, shared_secret, &shared_secret_len)) {
+        EC_KEY_free(new_dh_key);
+        return 0;
+    }
+
+    // Derive new root key
+    unsigned char new_root_key[ROOT_KEY_LEN];
+    if (!derive_root_key(shared_secret, shared_secret_len,
+                        NULL, 0, new_root_key)) {
+        EC_KEY_free(new_dh_key);
+        return 0;
+    }
+
+    // Cache the new root key
+    add_root_key_to_cache(state, new_root_key, state->sending_ratchet_index + 1);
+
+    // Update state
+    memcpy(state->root_key, new_root_key, ROOT_KEY_LEN);
+    if (state->sending_chain.dh_key) {
+        EC_KEY_free(state->sending_chain.dh_key);
+    }
+    state->sending_chain.dh_key = new_dh_key;
+    state->sending_ratchet_index++;
+
+    // Reset sending chain
+    memset(state->sending_chain.chain_key, 0, CHAIN_KEY_LEN);
+    state->sending_chain.chain_index = 0;
+
+    return 1;
+}
+
+static int rotate_receiving_ratchet(ratchet_state_t* state, EC_KEY* their_dh_key) {
+    if (!their_dh_key) {
+        return 0;
+    }
+
+    // Validate their DH key
+    if (!validate_ec_key(their_dh_key)) {
+        return 0;
+    }
+
+    // Generate new DH key pair
+    EC_KEY* new_dh_key = EC_KEY_new_by_curve_name(CURVE_NID);
+    if (!new_dh_key || !EC_KEY_generate_key(new_dh_key)) {
+        if (new_dh_key) EC_KEY_free(new_dh_key);
+        return 0;
+    }
+
+    // Validate our new key
+    if (!validate_ec_key(new_dh_key)) {
+        EC_KEY_free(new_dh_key);
+        return 0;
+    }
+
+    // Calculate new shared secret
+    unsigned char shared_secret[32];
+    size_t shared_secret_len = sizeof(shared_secret);
+    if (!calculate_dh_shared_secret(new_dh_key, their_dh_key, shared_secret, &shared_secret_len)) {
+        EC_KEY_free(new_dh_key);
+        return 0;
+    }
+
+    // Verify shared secret size
+    if (shared_secret_len != MIN_KEY_SIZE) {
+        EC_KEY_free(new_dh_key);
+        return 0;
+    }
+
+    // Derive new root key
+    unsigned char new_root_key[ROOT_KEY_LEN];
+    if (!derive_root_key(shared_secret, shared_secret_len,
+                        NULL, 0, new_root_key)) {
+        EC_KEY_free(new_dh_key);
+        return 0;
+    }
+
+    // Cache the new root key
+    add_root_key_to_cache(state, new_root_key, state->receiving_ratchet_index + 1);
+
+    // Update state
+    memcpy(state->root_key, new_root_key, ROOT_KEY_LEN);
+    if (state->receiving_chain.dh_key) {
+        EC_KEY_free(state->receiving_chain.dh_key);
+    }
+    state->receiving_chain.dh_key = new_dh_key;
+    state->receiving_ratchet_index++;
+
+    // Reset receiving chain
+    memset(state->receiving_chain.chain_key, 0, CHAIN_KEY_LEN);
+    state->receiving_chain.chain_index = 0;
+
+    return 1;
+}
+
+// Message key skipping functions
+static int add_skip_key(ratchet_chain_t* chain, const unsigned char* message_key,
+                       uint32_t index, uint32_t ratchet_index) {
+    if (chain->skip_key_count >= MAX_SKIP_KEYS) {
+        return 0;
+    }
+
+    // Check if we already have this key
+    for (size_t i = 0; i < chain->skip_key_count; i++) {
+        if (chain->skip_keys[i].index == index &&
+            chain->skip_keys[i].ratchet_index == ratchet_index) {
+            return 1; // Key already exists
+        }
+    }
+
+    // Add new skip key
+    memcpy(chain->skip_keys[chain->skip_key_count].key, message_key, MESSAGE_KEY_LEN);
+    chain->skip_keys[chain->skip_key_count].index = index;
+    chain->skip_keys[chain->skip_key_count].ratchet_index = ratchet_index;
+    chain->skip_key_count++;
+
+    // Cleanup if we're approaching the limit
+    if (chain->skip_key_count >= SKIP_KEY_CLEANUP_THRESHOLD) {
+        cleanup_skip_keys(chain);
+    }
+
+    return 1;
+}
+
+static int get_skip_key(ratchet_chain_t* chain, uint32_t index, uint32_t ratchet_index,
+                       unsigned char* message_key) {
+    for (size_t i = 0; i < chain->skip_key_count; i++) {
+        if (chain->skip_keys[i].index == index &&
+            chain->skip_keys[i].ratchet_index == ratchet_index) {
+            memcpy(message_key, chain->skip_keys[i].key, MESSAGE_KEY_LEN);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int derive_skip_keys(ratchet_chain_t* chain, uint32_t target_index,
+                          uint32_t ratchet_index) {
+    if (target_index <= chain->chain_index) {
+        return 1; // No need to derive skip keys
+    }
+
+    if (target_index - chain->chain_index > MAX_SKIP_DISTANCE) {
+        return 0; // Target index too far ahead
+    }
+
+    unsigned char current_chain_key[CHAIN_KEY_LEN];
+    memcpy(current_chain_key, chain->chain_key, CHAIN_KEY_LEN);
+    uint32_t current_index = chain->chain_index;
+
+    while (current_index < target_index) {
+        // Derive message key
+        unsigned char message_key[MESSAGE_KEY_LEN];
+        const unsigned char salt[] = "MessageKey";
+        if (!derive_message_key(current_chain_key, CHAIN_KEY_LEN,
+                              salt, sizeof(salt), message_key)) {
+            return 0;
+        }
+
+        // Store skip key
+        if (!add_skip_key(chain, message_key, current_index, ratchet_index)) {
+            return 0;
+        }
+
+        // Update chain key
+        if (!rotate_chain_key(chain)) {
+            return 0;
+        }
+
+        memcpy(current_chain_key, chain->chain_key, CHAIN_KEY_LEN);
+        current_index++;
+    }
+
+    return 1;
+}
+
+// Message key cleanup functions
+static void cleanup_message_keys(ratchet_chain_t* chain) {
+    if (chain->message_key_count < MESSAGE_KEY_CLEANUP_THRESHOLD) {
+        return;
+    }
+
+    // Find the oldest key that's still needed
+    uint32_t oldest_needed = chain->chain_index;
+    if (oldest_needed > MAX_KEY_AGE) {
+        oldest_needed -= MAX_KEY_AGE;
+    }
+
+    // Remove old message keys
+    size_t i = 0;
+    while (i < chain->message_key_count) {
+        if (chain->message_keys[i].index < oldest_needed) {
+            // Move the last key to this position
+            if (i < chain->message_key_count - 1) {
+                memcpy(&chain->message_keys[i], 
+                       &chain->message_keys[chain->message_key_count - 1],
+                       sizeof(message_key_t));
+            }
+            chain->message_key_count--;
+        } else {
+            i++;
+        }
+    }
+}
+
+static void cleanup_skip_keys(ratchet_chain_t* chain) {
+    if (chain->skip_key_count < SKIP_KEY_CLEANUP_THRESHOLD) {
+        return;
+    }
+
+    // Find the oldest key that's still needed
+    uint32_t oldest_needed = chain->chain_index;
+    if (oldest_needed > MAX_KEY_AGE) {
+        oldest_needed -= MAX_KEY_AGE;
+    }
+
+    // Remove old skip keys
+    size_t i = 0;
+    while (i < chain->skip_key_count) {
+        if (chain->skip_keys[i].index < oldest_needed) {
+            // Move the last key to this position
+            if (i < chain->skip_key_count - 1) {
+                memcpy(&chain->skip_keys[i],
+                       &chain->skip_keys[chain->skip_key_count - 1],
+                       sizeof(message_key_t));
+            }
+            chain->skip_key_count--;
+        } else {
+            i++;
+        }
+    }
+}
+
+static void cleanup_keys(ratchet_state_t* state) {
+    cleanup_message_keys(&state->sending_chain);
+    cleanup_message_keys(&state->receiving_chain);
+    cleanup_skip_keys(&state->sending_chain);
+    cleanup_skip_keys(&state->receiving_chain);
+
+    // Adjust cache sizes based on usage
+    adjust_cache_size(&state->chain_key_stats, &state->chain_key_cache_size);
+    adjust_cache_size(&state->root_key_stats, &state->root_key_cache_size);
+}
+
+// Adaptive cache sizing functions
+static void init_cache_stats(cache_stats_t* stats, size_t initial_size, size_t max_size) {
+    stats->hits = 0;
+    stats->misses = 0;
+    stats->current_size = initial_size;
+    stats->max_size = max_size;
+    stats->hit_ratio = 0.0;
+    stats->last_adjustment = 0;
+}
+
+static void update_cache_stats(cache_stats_t* stats, int hit) {
+    if (hit) {
+        stats->hits++;
+    } else {
+        stats->misses++;
+    }
+
+    size_t total = stats->hits + stats->misses;
+    if (total > 0) {
+        stats->hit_ratio = (double)stats->hits / total;
+    }
+}
+
+static void adjust_cache_size(cache_stats_t* stats, size_t* cache_size) {
+    // Only adjust after significant number of operations
+    if (stats->hits + stats->misses < 100) {
+        return;
+    }
+
+    // Check if we need to grow the cache
+    if (stats->hit_ratio > CACHE_HIT_THRESHOLD && 
+        stats->current_size < stats->max_size) {
+        size_t new_size = (size_t)(stats->current_size * CACHE_GROWTH_FACTOR);
+        if (new_size > stats->max_size) {
+            new_size = stats->max_size;
+        }
+        if (new_size > stats->current_size) {
+            stats->current_size = new_size;
+            *cache_size = new_size;
+            stats->last_adjustment = stats->hits + stats->misses;
+        }
+    }
+    // Check if we need to shrink the cache
+    else if (stats->hit_ratio < CACHE_MISS_THRESHOLD && 
+             stats->current_size > MIN_CHAIN_KEY_CACHE_SIZE) {
+        size_t new_size = (size_t)(stats->current_size * CACHE_SHRINK_FACTOR);
+        if (new_size < MIN_CHAIN_KEY_CACHE_SIZE) {
+            new_size = MIN_CHAIN_KEY_CACHE_SIZE;
+        }
+        if (new_size < stats->current_size) {
+            stats->current_size = new_size;
+            *cache_size = new_size;
+            stats->last_adjustment = stats->hits + stats->misses;
+        }
+    }
+}
+
+// Update get_cached_chain_key to use adaptive sizing
+static int get_cached_chain_key(ratchet_state_t* state, uint32_t index, uint32_t ratchet_index,
+                              unsigned char* chain_key) {
+    for (size_t i = 0; i < state->chain_key_cache_count; i++) {
+        if (state->chain_key_cache[i].index == index &&
+            state->chain_key_cache[i].ratchet_index == ratchet_index) {
+            memcpy(chain_key, state->chain_key_cache[i].chain_key, CHAIN_KEY_LEN);
+            update_cache_stats(&state->chain_key_stats, 1);
+            return 1;
+        }
+    }
+    update_cache_stats(&state->chain_key_stats, 0);
+    adjust_cache_size(&state->chain_key_stats, &state->chain_key_cache_size);
+    return 0;
+}
+
+// Update add_chain_key_to_cache to use adaptive sizing
+static void add_chain_key_to_cache(ratchet_state_t* state, const unsigned char* chain_key,
+                                 uint32_t index, uint32_t ratchet_index) {
+    // Check if we need to resize the cache
+    if (state->chain_key_cache_count >= state->chain_key_cache_size) {
+        size_t new_size = state->chain_key_cache_size;
+        adjust_cache_size(&state->chain_key_stats, &new_size);
+        
+        if (new_size > state->chain_key_cache_size) {
+            chain_key_cache_t* new_cache = OPENSSL_malloc(new_size * sizeof(chain_key_cache_t));
+            if (new_cache) {
+                memcpy(new_cache, state->chain_key_cache,
+                      state->chain_key_cache_count * sizeof(chain_key_cache_t));
+                OPENSSL_free(state->chain_key_cache);
+                state->chain_key_cache = new_cache;
+                state->chain_key_cache_size = new_size;
+            }
+        } else {
+            // Remove oldest entries if we can't grow
+            size_t to_remove = state->chain_key_cache_count - new_size + 1;
+            memmove(&state->chain_key_cache[0],
+                    &state->chain_key_cache[to_remove],
+                    (state->chain_key_cache_count - to_remove) * sizeof(chain_key_cache_t));
+            state->chain_key_cache_count -= to_remove;
+        }
+    }
+
+    // Add new entry
+    memcpy(state->chain_key_cache[state->chain_key_cache_count].chain_key,
+           chain_key, CHAIN_KEY_LEN);
+    state->chain_key_cache[state->chain_key_cache_count].index = index;
+    state->chain_key_cache[state->chain_key_cache_count].ratchet_index = ratchet_index;
+    state->chain_key_cache_count++;
+}
+
+// Update get_cached_root_key to use adaptive sizing
+static int get_cached_root_key(ratchet_state_t* state, uint32_t ratchet_index,
+                             unsigned char* root_key) {
+    for (size_t i = 0; i < state->root_key_cache_count; i++) {
+        if (state->root_key_cache[i].ratchet_index == ratchet_index) {
+            memcpy(root_key, state->root_key_cache[i].root_key, ROOT_KEY_LEN);
+            update_cache_stats(&state->root_key_stats, 1);
+            return 1;
+        }
+    }
+    update_cache_stats(&state->root_key_stats, 0);
+    adjust_cache_size(&state->root_key_stats, &state->root_key_cache_size);
+    return 0;
+}
+
+// Update add_root_key_to_cache to use adaptive sizing
+static void add_root_key_to_cache(ratchet_state_t* state, const unsigned char* root_key,
+                                uint32_t ratchet_index) {
+    // Check if we need to resize the cache
+    if (state->root_key_cache_count >= state->root_key_cache_size) {
+        size_t new_size = state->root_key_cache_size;
+        adjust_cache_size(&state->root_key_stats, &new_size);
+        
+        if (new_size > state->root_key_cache_size) {
+            root_key_cache_t* new_cache = OPENSSL_malloc(new_size * sizeof(root_key_cache_t));
+            if (new_cache) {
+                memcpy(new_cache, state->root_key_cache,
+                      state->root_key_cache_count * sizeof(root_key_cache_t));
+                OPENSSL_free(state->root_key_cache);
+                state->root_key_cache = new_cache;
+                state->root_key_cache_size = new_size;
+            }
+        } else {
+            // Remove oldest entries if we can't grow
+            size_t to_remove = state->root_key_cache_count - new_size + 1;
+            memmove(&state->root_key_cache[0],
+                    &state->root_key_cache[to_remove],
+                    (state->root_key_cache_count - to_remove) * sizeof(root_key_cache_t));
+            state->root_key_cache_count -= to_remove;
+        }
+    }
+
+    // Add new entry
+    memcpy(state->root_key_cache[state->root_key_cache_count].root_key,
+           root_key, ROOT_KEY_LEN);
+    state->root_key_cache[state->root_key_cache_count].ratchet_index = ratchet_index;
+    state->root_key_cache_count++;
+}
+
+// Update init_ratchet_state to initialize adaptive caches
+static int init_ratchet_state(ratchet_state_t* state) {
+    // Initialize chain key cache
+    state->chain_key_cache = OPENSSL_malloc(MIN_CHAIN_KEY_CACHE_SIZE * sizeof(chain_key_cache_t));
+    if (!state->chain_key_cache) {
+        return 0;
+    }
+    state->chain_key_cache_size = MIN_CHAIN_KEY_CACHE_SIZE;
+    state->chain_key_cache_count = 0;
+    init_cache_stats(&state->chain_key_stats, MIN_CHAIN_KEY_CACHE_SIZE, MAX_CHAIN_KEY_CACHE_SIZE);
+
+    // Initialize root key cache
+    state->root_key_cache = OPENSSL_malloc(MIN_ROOT_KEY_CACHE_SIZE * sizeof(root_key_cache_t));
+    if (!state->root_key_cache) {
+        OPENSSL_free(state->chain_key_cache);
+        return 0;
+    }
+    state->root_key_cache_size = MIN_ROOT_KEY_CACHE_SIZE;
+    state->root_key_cache_count = 0;
+    init_cache_stats(&state->root_key_stats, MIN_ROOT_KEY_CACHE_SIZE, MAX_ROOT_KEY_CACHE_SIZE);
+
+    return 1;
+}
+
+// NIF implementations
+static ERL_NIF_TERM generate_identity_key_pair(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    EC_KEY* key;
+    ERL_NIF_TERM public_key, private_key;
+
+    if (!generate_ec_key_pair(&key)) {
+        return make_error(env, "Failed to generate key pair");
+    }
+
+    public_key = key_to_binary(env, key, 1);
+    private_key = key_to_binary(env, key, 0);
+
+    EC_KEY_free(key);
+    return make_ok(env, enif_make_tuple2(env, public_key, private_key));
+}
+
+static ERL_NIF_TERM generate_pre_key(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    int key_id;
+    EC_KEY* key;
+    ERL_NIF_TERM public_key;
+
+    if (!enif_get_int(env, argv[0], &key_id)) {
+        return make_error(env, "Invalid key ID");
+    }
+
+    if (!generate_ec_key_pair(&key)) {
+        return make_error(env, "Failed to generate pre-key");
+    }
+
+    public_key = key_to_binary(env, key, 1);
+    EC_KEY_free(key);
+
+    return make_ok(env, enif_make_tuple2(env, enif_make_int(env, key_id), public_key));
+}
+
+static ERL_NIF_TERM generate_signed_pre_key(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    ErlNifBinary identity_key;
+    int key_id;
+    EC_KEY* key;
+    ERL_NIF_TERM public_key, signature;
+
+    if (!enif_inspect_binary(env, argv[0], &identity_key) ||
+        !enif_get_int(env, argv[1], &key_id)) {
+        return make_error(env, "Invalid arguments");
+    }
+
+    if (!generate_ec_key_pair(&key)) {
+        return make_error(env, "Failed to generate signed pre-key");
+    }
+
+    public_key = key_to_binary(env, key, 1);
+    signature = sign_data(env, key, identity_key.data, identity_key.size);
+
+    EC_KEY_free(key);
+    return make_ok(env, enif_make_tuple3(env, enif_make_int(env, key_id), public_key, signature));
+}
+
+static ERL_NIF_TERM create_session(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    ErlNifBinary local_identity_key, remote_identity_key;
+    ERL_NIF_TERM session_id;
+
+    if (!enif_inspect_binary(env, argv[0], &local_identity_key) ||
+        !enif_inspect_binary(env, argv[1], &remote_identity_key)) {
+        return make_error(env, "Invalid identity keys");
+    }
+
+    // Generate a unique session ID
+    unsigned char id[32];
+    if (!RAND_bytes(id, sizeof(id))) {
+        return make_error(env, "Failed to generate session ID");
+    }
+
+    session_id = make_binary(env, id, sizeof(id));
+    return make_ok(env, session_id);
+}
+
+static ERL_NIF_TERM process_pre_key_bundle(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    ErlNifBinary session, bundle;
+    if (!enif_inspect_binary(env, argv[0], &session) ||
+        !enif_inspect_binary(env, argv[1], &bundle)) {
+        return make_error(env, "Invalid arguments");
+    }
+
+    // Parse bundle components
+    size_t offset = 0;
+    uint32_t registration_id, device_id, pre_key_id, signed_pre_key_id;
+    unsigned char *pre_key = NULL, *signed_pre_key = NULL, *identity_key = NULL;
+    size_t pre_key_len = 0, signed_pre_key_len = 0, identity_key_len = 0;
+
+    // Parse registration ID
+    if (!parse_uint32(bundle.data + offset, &registration_id)) {
+        return make_error(env, "Invalid registration ID");
+    }
+    offset += 4;
+
+    // Parse device ID
+    if (!parse_uint32(bundle.data + offset, &device_id)) {
+        return make_error(env, "Invalid device ID");
+    }
+    offset += 4;
+
+    // Parse pre-key ID
+    if (!parse_uint32(bundle.data + offset, &pre_key_id)) {
+        return make_error(env, "Invalid pre-key ID");
+    }
+    offset += 4;
+
+    // Parse pre-key
+    if (!parse_binary(bundle.data, bundle.size, &offset, &pre_key, &pre_key_len)) {
+        return make_error(env, "Invalid pre-key");
+    }
+
+    // Parse signed pre-key ID
+    if (!parse_uint32(bundle.data + offset, &signed_pre_key_id)) {
+        return make_error(env, "Invalid signed pre-key ID");
+    }
+    offset += 4;
+
+    // Parse signed pre-key
+    if (!parse_binary(bundle.data, bundle.size, &offset, &signed_pre_key, &signed_pre_key_len)) {
+        return make_error(env, "Invalid signed pre-key");
+    }
+
+    // Parse identity key
+    if (!parse_binary(bundle.data, bundle.size, &offset, &identity_key, &identity_key_len)) {
+        return make_error(env, "Invalid identity key");
+    }
+
+    // Verify we've consumed all data
+    if (offset != bundle.size) {
+        return make_error(env, "Extra data in bundle");
+    }
+
+    // Create EC_KEY from pre-key
+    EC_KEY* pre_key_ec = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+    if (!pre_key_ec) {
+        return make_error(env, "Failed to create pre-key EC_KEY");
+    }
+
+    const EC_GROUP* group = EC_KEY_get0_group(pre_key_ec);
+    EC_POINT* point = EC_POINT_new(group);
+    if (!point) {
+        EC_KEY_free(pre_key_ec);
+        return make_error(env, "Failed to create EC_POINT");
+    }
+
+    if (EC_POINT_oct2point(group, point, pre_key, pre_key_len, NULL) != 1) {
+        EC_POINT_free(point);
+        EC_KEY_free(pre_key_ec);
+        return make_error(env, "Invalid pre-key point");
+    }
+
+    if (EC_KEY_set_public_key(pre_key_ec, point) != 1) {
+        EC_POINT_free(point);
+        EC_KEY_free(pre_key_ec);
+        return make_error(env, "Failed to set pre-key public key");
+    }
+
+    // Create EC_KEY from signed pre-key
+    EC_KEY* signed_pre_key_ec = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+    if (!signed_pre_key_ec) {
+        EC_POINT_free(point);
+        EC_KEY_free(pre_key_ec);
+        return make_error(env, "Failed to create signed pre-key EC_KEY");
+    }
+
+    EC_POINT* signed_point = EC_POINT_new(group);
+    if (!signed_point) {
+        EC_KEY_free(signed_pre_key_ec);
+        EC_POINT_free(point);
+        EC_KEY_free(pre_key_ec);
+        return make_error(env, "Failed to create signed pre-key EC_POINT");
+    }
+
+    if (EC_POINT_oct2point(group, signed_point, signed_pre_key, signed_pre_key_len, NULL) != 1) {
+        EC_POINT_free(signed_point);
+        EC_KEY_free(signed_pre_key_ec);
+        EC_POINT_free(point);
+        EC_KEY_free(pre_key_ec);
+        return make_error(env, "Invalid signed pre-key point");
+    }
+
+    if (EC_KEY_set_public_key(signed_pre_key_ec, signed_point) != 1) {
+        EC_POINT_free(signed_point);
+        EC_KEY_free(signed_pre_key_ec);
+        EC_POINT_free(point);
+        EC_KEY_free(pre_key_ec);
+        return make_error(env, "Failed to set signed pre-key public key");
+    }
+
+    // Create EC_KEY from identity key
+    EC_KEY* identity_key_ec = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+    if (!identity_key_ec) {
+        EC_POINT_free(signed_point);
+        EC_KEY_free(signed_pre_key_ec);
+        EC_POINT_free(point);
+        EC_KEY_free(pre_key_ec);
+        return make_error(env, "Failed to create identity key EC_KEY");
+    }
+
+    EC_POINT* identity_point = EC_POINT_new(group);
+    if (!identity_point) {
+        EC_KEY_free(identity_key_ec);
+        EC_POINT_free(signed_point);
+        EC_KEY_free(signed_pre_key_ec);
+        EC_POINT_free(point);
+        EC_KEY_free(pre_key_ec);
+        return make_error(env, "Failed to create identity key EC_POINT");
+    }
+
+    if (EC_POINT_oct2point(group, identity_point, identity_key, identity_key_len, NULL) != 1) {
+        EC_POINT_free(identity_point);
+        EC_KEY_free(identity_key_ec);
+        EC_POINT_free(signed_point);
+        EC_KEY_free(signed_pre_key_ec);
+        EC_POINT_free(point);
+        EC_KEY_free(pre_key_ec);
+        return make_error(env, "Invalid identity key point");
+    }
+
+    if (EC_KEY_set_public_key(identity_key_ec, identity_point) != 1) {
+        EC_POINT_free(identity_point);
+        EC_KEY_free(identity_key_ec);
+        EC_POINT_free(signed_point);
+        EC_KEY_free(signed_pre_key_ec);
+        EC_POINT_free(point);
+        EC_KEY_free(pre_key_ec);
+        return make_error(env, "Failed to set identity key public key");
+    }
+
+    // Generate ephemeral key pair
+    EC_KEY* ephemeral_key = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+    if (!ephemeral_key) {
+        EC_POINT_free(identity_point);
+        EC_KEY_free(identity_key_ec);
+        EC_POINT_free(signed_point);
+        EC_POINT_free(point);
+        EC_KEY_free(pre_key_ec);
+        return make_error(env, "Failed to create ephemeral key");
+    }
+
+    if (!EC_KEY_generate_key(ephemeral_key)) {
+        EC_KEY_free(ephemeral_key);
+        EC_POINT_free(identity_point);
+        EC_KEY_free(identity_key_ec);
+        EC_POINT_free(signed_point);
+        EC_POINT_free(point);
+        EC_KEY_free(pre_key_ec);
+        return make_error(env, "Failed to generate ephemeral key");
+    }
+
+    // Calculate shared secrets
+    unsigned char dh1[256], dh2[256], dh3[256];
+    size_t dh1_len = sizeof(dh1), dh2_len = sizeof(dh2), dh3_len = sizeof(dh3);
+
+    if (!calculate_dh_shared_secret(ephemeral_key, pre_key_ec, dh1, &dh1_len) ||
+        !calculate_dh_shared_secret(ephemeral_key, signed_pre_key_ec, dh2, &dh2_len) ||
+        !calculate_dh_shared_secret(ephemeral_key, identity_key_ec, dh3, &dh3_len)) {
+        EC_KEY_free(ephemeral_key);
+        EC_POINT_free(identity_point);
+        EC_KEY_free(identity_key_ec);
+        EC_POINT_free(signed_point);
+        EC_POINT_free(point);
+        EC_KEY_free(pre_key_ec);
+        return make_error(env, "Failed to calculate shared secrets");
+    }
+
+    // Derive master secret
+    unsigned char master_secret[96];
+    memcpy(master_secret, dh1, dh1_len);
+    memcpy(master_secret + dh1_len, dh2, dh2_len);
+    memcpy(master_secret + dh1_len + dh2_len, dh3, dh3_len);
+
+    // Derive root key
+    unsigned char root_key[ROOT_KEY_LEN];
+    const unsigned char salt[] = "SignalProtocol";
+    if (!derive_root_key(master_secret, sizeof(master_secret), salt, sizeof(salt), root_key)) {
+        EC_KEY_free(ephemeral_key);
+        EC_POINT_free(identity_point);
+        EC_KEY_free(identity_key_ec);
+        EC_POINT_free(signed_point);
+        EC_POINT_free(point);
+        EC_KEY_free(pre_key_ec);
+        return make_error(env, "Failed to derive root key");
+    }
+
+    // Derive chain key
+    unsigned char chain_key[CHAIN_KEY_LEN];
+    if (!derive_chain_key(root_key, ROOT_KEY_LEN, salt, sizeof(salt), chain_key)) {
+        EC_KEY_free(ephemeral_key);
+        EC_POINT_free(identity_point);
+        EC_KEY_free(identity_key_ec);
+        EC_POINT_free(signed_point);
+        EC_POINT_free(point);
+        EC_KEY_free(pre_key_ec);
+        return make_error(env, "Failed to derive chain key");
+    }
+
+    // Create result tuple with derived keys
+    ERL_NIF_TERM result = enif_make_tuple9(env,
+        enif_make_uint(env, registration_id),
+        enif_make_uint(env, device_id),
+        enif_make_uint(env, pre_key_id),
+        key_to_binary(env, pre_key_ec, 1),
+        enif_make_uint(env, signed_pre_key_id),
+        key_to_binary(env, signed_pre_key_ec, 1),
+        key_to_binary(env, identity_key_ec, 1),
+        key_to_binary(env, ephemeral_key, 1),
+        make_binary(env, chain_key, CHAIN_KEY_LEN)
+    );
+
+    // Clean up
+    EC_KEY_free(ephemeral_key);
+    EC_POINT_free(identity_point);
+    EC_KEY_free(identity_key_ec);
+    EC_POINT_free(signed_point);
+    EC_KEY_free(signed_pre_key_ec);
+    EC_POINT_free(point);
+    EC_KEY_free(pre_key_ec);
+
+    return make_ok(env, result);
+}
+
+static ERL_NIF_TERM encrypt_message(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    ErlNifBinary session, message;
+    if (!enif_inspect_binary(env, argv[0], &session) ||
+        !enif_inspect_binary(env, argv[1], &message)) {
+        return make_error(env, "Invalid arguments");
+    }
+
+    // Extract ratchet state from session
+    ratchet_state_t state;
+    if (session.size < sizeof(ratchet_state_t)) {
+        return make_error(env, "Invalid session data");
+    }
+    memcpy(&state, session.data, sizeof(ratchet_state_t));
+
+    // Rotate sending ratchet if needed
+    if (state.sending_chain.chain_index >= RATCHET_ROTATION_THRESHOLD) {
+        if (!rotate_sending_ratchet(&state)) {
+            return make_error(env, "Failed to rotate sending ratchet");
+        }
+    }
+
+    // Try to get cached chain key
+    unsigned char chain_key[CHAIN_KEY_LEN];
+    if (!get_cached_chain_key(&state, state.sending_chain.chain_index,
+                            state.sending_ratchet_index, chain_key)) {
+        memcpy(chain_key, state.sending_chain.chain_key, CHAIN_KEY_LEN);
+    }
+
+    // Derive message key
+    unsigned char message_key[MESSAGE_KEY_LEN];
+    const unsigned char salt[] = "MessageKey";
+    if (!derive_message_key(chain_key, CHAIN_KEY_LEN,
+                          salt, sizeof(salt), message_key)) {
+        return make_error(env, "Failed to derive message key");
+    }
+
+    // Cache the new chain key after rotation
+    if (!rotate_chain_key(&state.sending_chain)) {
+        return make_error(env, "Failed to rotate chain key");
+    }
+    add_chain_key_to_cache(&state, state.sending_chain.chain_key,
+                          state.sending_chain.chain_index,
+                          state.sending_ratchet_index);
+
+    // Generate IV
+    unsigned char iv[16];
+    if (!RAND_bytes(iv, sizeof(iv))) {
+        return make_error(env, "Failed to generate IV");
+    }
+
+    // Encrypt message
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+        return make_error(env, "Failed to create cipher context");
+    }
+
+    if (EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, message_key, iv) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        return make_error(env, "Failed to initialize encryption");
+    }
+
+    int outlen;
+    unsigned char* ciphertext = OPENSSL_malloc(message.size + EVP_MAX_BLOCK_LENGTH);
+    if (!ciphertext) {
+        EVP_CIPHER_CTX_free(ctx);
+        return make_error(env, "Failed to allocate ciphertext buffer");
+    }
+
+    if (EVP_EncryptUpdate(ctx, ciphertext, &outlen, message.data, message.size) != 1) {
+        OPENSSL_free(ciphertext);
+        EVP_CIPHER_CTX_free(ctx);
+        return make_error(env, "Failed to encrypt message");
+    }
+
+    int final_len;
+    if (EVP_EncryptFinal_ex(ctx, ciphertext + outlen, &final_len) != 1) {
+        OPENSSL_free(ciphertext);
+        EVP_CIPHER_CTX_free(ctx);
+        return make_error(env, "Failed to finalize encryption");
+    }
+
+    // Get authentication tag
+    unsigned char tag[16];
+    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, tag) != 1) {
+        OPENSSL_free(ciphertext);
+        EVP_CIPHER_CTX_free(ctx);
+        return make_error(env, "Failed to get authentication tag");
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+
+    // Update chain key
+    if (!rotate_chain_key(&state.sending_chain)) {
+        OPENSSL_free(ciphertext);
+        return make_error(env, "Failed to update chain key");
+    }
+
+    // Store message key for potential future use
+    if (!add_message_key(&state.sending_chain, message_key)) {
+        OPENSSL_free(ciphertext);
+        return make_error(env, "Failed to store message key");
+    }
+
+    // Update session state
+    ERL_NIF_TERM updated_session;
+    unsigned char* session_data = enif_make_new_binary(env, sizeof(ratchet_state_t), &updated_session);
+    memcpy(session_data, &state, sizeof(ratchet_state_t));
+
+    // Create message header with DH key
+    ERL_NIF_TERM header;
+    unsigned char* header_data = enif_make_new_binary(env, HEADER_SIZE, &header);
+    uint32_t ratchet_index = state.sending_ratchet_index;
+    uint32_t chain_index = state.sending_chain.chain_index;
+
+    // Write ratchet index and chain index to header
+    header_data[0] = (ratchet_index >> 24) & 0xFF;
+    header_data[1] = (ratchet_index >> 16) & 0xFF;
+    header_data[2] = (ratchet_index >> 8) & 0xFF;
+    header_data[3] = ratchet_index & 0xFF;
+    header_data[4] = (chain_index >> 24) & 0xFF;
+    header_data[5] = (chain_index >> 16) & 0xFF;
+    header_data[6] = (chain_index >> 8) & 0xFF;
+    header_data[7] = chain_index & 0xFF;
+
+    // Write DH public key to header
+    const EC_POINT* pub_key = EC_KEY_get0_public_key(state.sending_chain.dh_key);
+    if (!pub_key) {
+        return make_error(env, "Failed to get public key");
+    }
+
+    size_t key_len = EC_POINT_point2oct(EC_KEY_get0_group(state.sending_chain.dh_key),
+                                      pub_key,
+                                      POINT_CONVERSION_UNCOMPRESSED,
+                                      header_data + 8,
+                                      65,
+                                      NULL);
+    if (key_len != 65) {
+        return make_error(env, "Failed to serialize public key");
+    }
+
+    // Combine IV, ciphertext, and tag
+    ERL_NIF_TERM encrypted;
+    unsigned char* combined = enif_make_new_binary(env, sizeof(iv) + outlen + final_len + sizeof(tag), &encrypted);
+    memcpy(combined, iv, sizeof(iv));
+    memcpy(combined + sizeof(iv), ciphertext, outlen + final_len);
+    memcpy(combined + sizeof(iv) + outlen + final_len, tag, sizeof(tag));
+
+    OPENSSL_free(ciphertext);
+
+    // Cleanup old keys before encryption
+    cleanup_keys(&state);
+
+    // Return updated session, message header, and encrypted message
+    return make_ok(env, enif_make_tuple3(env, updated_session, header, encrypted));
+}
+
+static ERL_NIF_TERM decrypt_message(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    ErlNifBinary session, encrypted, header;
+    if (!enif_inspect_binary(env, argv[0], &session) ||
+        !enif_inspect_binary(env, argv[1], &encrypted) ||
+        !enif_inspect_binary(env, argv[2], &header)) {
+        return make_error(env, "Invalid arguments");
+    }
+
+    if (encrypted.size < 32) { // IV (16) + TAG (16)
+        return make_error(env, "Invalid encrypted message");
+    }
+
+    // Extract ratchet state from session
+    ratchet_state_t state;
+    if (session.size < sizeof(ratchet_state_t)) {
+        return make_error(env, "Invalid session data");
+    }
+    memcpy(&state, session.data, sizeof(ratchet_state_t));
+
+    // Parse message header
+    size_t offset = 0;
+    uint32_t message_ratchet_index, message_chain_index;
+    
+    if (!parse_uint32(header.data + offset, &message_ratchet_index)) {
+        return make_error(env, "Invalid message ratchet index");
+    }
+    offset += 4;
+
+    if (!parse_uint32(header.data + offset, &message_chain_index)) {
+        return make_error(env, "Invalid message chain index");
+    }
+    offset += 4;
+
+    // Validate header size
+    if (header.size != HEADER_SIZE) {
+        return make_error(env, "Invalid header size");
+    }
+
+    // Extract and validate DH public key from header
+    if (!validate_public_key_data(header.data + offset, 65)) {
+        return make_error(env, "Invalid public key format");
+    }
+
+    // Create and validate DH key
+    EC_KEY* their_dh_key = EC_KEY_new_by_curve_name(CURVE_NID);
+    if (!their_dh_key) {
+        return make_error(env, "Failed to create DH key");
+    }
+
+    const EC_GROUP* group = EC_KEY_get0_group(their_dh_key);
+    EC_POINT* pub_point = EC_POINT_new(group);
+    if (!pub_point) {
+        EC_KEY_free(their_dh_key);
+        return make_error(env, "Failed to create EC point");
+    }
+
+    if (!EC_POINT_oct2point(group, pub_point, header.data + offset, 65, NULL)) {
+        EC_POINT_free(pub_point);
+        EC_KEY_free(their_dh_key);
+        return make_error(env, "Failed to parse public key");
+    }
+
+    if (!EC_KEY_set_public_key(their_dh_key, pub_point)) {
+        EC_POINT_free(pub_point);
+        EC_KEY_free(their_dh_key);
+        return make_error(env, "Failed to set public key");
+    }
+
+    EC_POINT_free(pub_point);
+
+    // Validate the DH key
+    if (!validate_ec_key(their_dh_key)) {
+        EC_KEY_free(their_dh_key);
+        return make_error(env, "Invalid DH key");
+    }
+
+    // Handle out-of-order messages
+    if (message_ratchet_index < state.receiving_ratchet_index) {
+        EC_KEY_free(their_dh_key);
+        return make_error(env, "Message from old ratchet");
+    }
+
+    if (message_ratchet_index > state.receiving_ratchet_index) {
+        // Need to rotate receiving ratchet with their DH key
+        if (!rotate_receiving_ratchet(&state, their_dh_key)) {
+            EC_KEY_free(their_dh_key);
+            return make_error(env, "Failed to rotate receiving ratchet");
+        }
+    }
+
+    EC_KEY_free(their_dh_key);
+
+    // Try to get cached chain key
+    unsigned char chain_key[CHAIN_KEY_LEN];
+    if (!get_cached_chain_key(&state, message_chain_index,
+                            message_ratchet_index, chain_key)) {
+        memcpy(chain_key, state.receiving_chain.chain_key, CHAIN_KEY_LEN);
+    }
+
+    // Extract IV, ciphertext, and tag
+    unsigned char* iv = encrypted.data;
+    unsigned char* tag = encrypted.data + encrypted.size - 16;
+    size_t ciphertext_len = encrypted.size - 32;
+
+    // Decrypt message
+    EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+    if (!ctx) {
+        return make_error(env, "Failed to create cipher context");
+    }
+
+    if (EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, chain_key, iv) != 1) {
+        EVP_CIPHER_CTX_free(ctx);
+        return make_error(env, "Failed to initialize decryption");
+    }
+
+    unsigned char* plaintext = OPENSSL_malloc(ciphertext_len);
+    if (!plaintext) {
+        EVP_CIPHER_CTX_free(ctx);
+        return make_error(env, "Failed to allocate plaintext buffer");
+    }
+
+    int outlen;
+    if (EVP_DecryptUpdate(ctx, plaintext, &outlen, encrypted.data + 16, ciphertext_len) != 1) {
+        OPENSSL_free(plaintext);
+        EVP_CIPHER_CTX_free(ctx);
+        return make_error(env, "Failed to decrypt message");
+    }
+
+    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16, tag) != 1) {
+        OPENSSL_free(plaintext);
+        EVP_CIPHER_CTX_free(ctx);
+        return make_error(env, "Failed to set authentication tag");
+    }
+
+    int final_len;
+    if (EVP_DecryptFinal_ex(ctx, plaintext + outlen, &final_len) != 1) {
+        OPENSSL_free(plaintext);
+        EVP_CIPHER_CTX_free(ctx);
+        return make_error(env, "Failed to finalize decryption");
+    }
+
+    EVP_CIPHER_CTX_free(ctx);
+
+    // Update chain key if this was the next expected message
+    if (message_chain_index == state.receiving_chain.chain_index) {
+        if (!rotate_chain_key(&state.receiving_chain)) {
+            OPENSSL_free(plaintext);
+            return make_error(env, "Failed to update chain key");
+        }
+    }
+
+    // Update session state
+    ERL_NIF_TERM updated_session;
+    unsigned char* session_data = enif_make_new_binary(env, sizeof(ratchet_state_t), &updated_session);
+    memcpy(session_data, &state, sizeof(ratchet_state_t));
+
+    ERL_NIF_TERM result = make_binary(env, plaintext, outlen + final_len);
+    OPENSSL_free(plaintext);
+
+    // Cleanup old keys before decryption
+    cleanup_keys(&state);
+
+    // Return updated session and decrypted message
+    return make_ok(env, enif_make_tuple2(env, updated_session, result));
+}
+
+// Cache statistics NIF functions
+static ERL_NIF_TERM get_cache_stats(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    ErlNifBinary session;
+    if (!enif_inspect_binary(env, argv[0], &session)) {
+        return make_error(env, "Invalid session data");
+    }
+
+    if (session.size < sizeof(ratchet_state_t)) {
+        return make_error(env, "Invalid session size");
+    }
+
+    ratchet_state_t* state = (ratchet_state_t*)session.data;
+
+    // Create chain key cache stats map
+    ERL_NIF_TERM chain_key_stats = enif_make_new_map(env);
+    enif_make_map_put(env, chain_key_stats,
+                     enif_make_atom(env, "hits"),
+                     enif_make_ulong(env, state->chain_key_stats.hits),
+                     &chain_key_stats);
+    enif_make_map_put(env, chain_key_stats,
+                     enif_make_atom(env, "misses"),
+                     enif_make_ulong(env, state->chain_key_stats.misses),
+                     &chain_key_stats);
+    enif_make_map_put(env, chain_key_stats,
+                     enif_make_atom(env, "hit_ratio"),
+                     enif_make_double(env, state->chain_key_stats.hit_ratio),
+                     &chain_key_stats);
+    enif_make_map_put(env, chain_key_stats,
+                     enif_make_atom(env, "current_size"),
+                     enif_make_ulong(env, state->chain_key_stats.current_size),
+                     &chain_key_stats);
+    enif_make_map_put(env, chain_key_stats,
+                     enif_make_atom(env, "max_size"),
+                     enif_make_ulong(env, state->chain_key_stats.max_size),
+                     &chain_key_stats);
+    enif_make_map_put(env, chain_key_stats,
+                     enif_make_atom(env, "cache_count"),
+                     enif_make_ulong(env, state->chain_key_cache_count),
+                     &chain_key_stats);
+
+    // Create root key cache stats map
+    ERL_NIF_TERM root_key_stats = enif_make_new_map(env);
+    enif_make_map_put(env, root_key_stats,
+                     enif_make_atom(env, "hits"),
+                     enif_make_ulong(env, state->root_key_stats.hits),
+                     &root_key_stats);
+    enif_make_map_put(env, root_key_stats,
+                     enif_make_atom(env, "misses"),
+                     enif_make_ulong(env, state->root_key_stats.misses),
+                     &root_key_stats);
+    enif_make_map_put(env, root_key_stats,
+                     enif_make_atom(env, "hit_ratio"),
+                     enif_make_double(env, state->root_key_stats.hit_ratio),
+                     &root_key_stats);
+    enif_make_map_put(env, root_key_stats,
+                     enif_make_atom(env, "current_size"),
+                     enif_make_ulong(env, state->root_key_stats.current_size),
+                     &root_key_stats);
+    enif_make_map_put(env, root_key_stats,
+                     enif_make_atom(env, "max_size"),
+                     enif_make_ulong(env, state->root_key_stats.max_size),
+                     &root_key_stats);
+    enif_make_map_put(env, root_key_stats,
+                     enif_make_atom(env, "cache_count"),
+                     enif_make_ulong(env, state->root_key_cache_count),
+                     &root_key_stats);
+
+    // Create overall stats map
+    ERL_NIF_TERM stats = enif_make_new_map(env);
+    enif_make_map_put(env, stats,
+                     enif_make_atom(env, "chain_key_cache"),
+                     chain_key_stats,
+                     &stats);
+    enif_make_map_put(env, stats,
+                     enif_make_atom(env, "root_key_cache"),
+                     root_key_stats,
+                     &stats);
+
+    return make_ok(env, stats);
+}
+
+static ERL_NIF_TERM reset_cache_stats(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    ErlNifBinary session;
+    if (!enif_inspect_binary(env, argv[0], &session)) {
+        return make_error(env, "Invalid session data");
+    }
+
+    if (session.size < sizeof(ratchet_state_t)) {
+        return make_error(env, "Invalid session size");
+    }
+
+    ratchet_state_t* state = (ratchet_state_t*)session.data;
+
+    // Reset chain key cache stats
+    state->chain_key_stats.hits = 0;
+    state->chain_key_stats.misses = 0;
+    state->chain_key_stats.hit_ratio = 0.0;
+    state->chain_key_stats.last_adjustment = 0;
+
+    // Reset root key cache stats
+    state->root_key_stats.hits = 0;
+    state->root_key_stats.misses = 0;
+    state->root_key_stats.hit_ratio = 0.0;
+    state->root_key_stats.last_adjustment = 0;
+
+    return make_ok(env, enif_make_atom(env, "ok"));
+}
+
+static ERL_NIF_TERM set_cache_size(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    ErlNifBinary session;
+    int cache_type;
+    unsigned long new_size;
+    if (!enif_inspect_binary(env, argv[0], &session) ||
+        !enif_get_int(env, argv[1], &cache_type) ||
+        !enif_get_ulong(env, argv[2], &new_size)) {
+        return make_error(env, "Invalid arguments");
+    }
+
+    if (session.size < sizeof(ratchet_state_t)) {
+        return make_error(env, "Invalid session size");
+    }
+
+    ratchet_state_t* state = (ratchet_state_t*)session.data;
+
+    // Validate new size
+    if (new_size < MIN_CHAIN_KEY_CACHE_SIZE || new_size > MAX_CHAIN_KEY_CACHE_SIZE) {
+        return make_error(env, "Invalid cache size");
+    }
+
+    // Update cache size based on type
+    if (cache_type == 0) { // Chain key cache
+        if (new_size < state->chain_key_cache_count) {
+            return make_error(env, "New size smaller than current cache count");
+        }
+        chain_key_cache_t* new_cache = OPENSSL_malloc(new_size * sizeof(chain_key_cache_t));
+        if (!new_cache) {
+            return make_error(env, "Failed to allocate new cache");
+        }
+        memcpy(new_cache, state->chain_key_cache,
+               state->chain_key_cache_count * sizeof(chain_key_cache_t));
+        OPENSSL_free(state->chain_key_cache);
+        state->chain_key_cache = new_cache;
+        state->chain_key_cache_size = new_size;
+        state->chain_key_stats.current_size = new_size;
+    } else if (cache_type == 1) { // Root key cache
+        if (new_size < state->root_key_cache_count) {
+            return make_error(env, "New size smaller than current cache count");
+        }
+        root_key_cache_t* new_cache = OPENSSL_malloc(new_size * sizeof(root_key_cache_t));
+        if (!new_cache) {
+            return make_error(env, "Failed to allocate new cache");
+        }
+        memcpy(new_cache, state->root_key_cache,
+               state->root_key_cache_count * sizeof(root_key_cache_t));
+        OPENSSL_free(state->root_key_cache);
+        state->root_key_cache = new_cache;
+        state->root_key_cache_size = new_size;
+        state->root_key_stats.current_size = new_size;
+    } else {
+        return make_error(env, "Invalid cache type");
+    }
+
+    return make_ok(env, enif_make_atom(env, "ok"));
+} 

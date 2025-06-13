@@ -1,0 +1,8 @@
+{application, 'libsignal-protocol-nif', [
+    {description, "Signal Protocol NIF"},
+    {vsn, "0.1.0"},
+    {registered, []},
+    {applications, [kernel, stdlib, crypto]},
+    {mod, {libsignal_protocol_nif_app, []}},
+    {env, []}
+]}. 

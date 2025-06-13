@@ -1,0 +1,13 @@
+_build/
+*.beam
+*.o
+*.so
+*.dylib
+*.a
+*.log
+*.html
+tmp/
+priv/
+rebar3.crashdump
+ct_log_cache
+c_src/build/ 

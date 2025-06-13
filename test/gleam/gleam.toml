@@ -1,0 +1,14 @@
+name = "libsignal_protocol"
+version = "0.1.0"
+description = "Signal Protocol implementation for Gleam"
+licences = ["MIT"]
+repository = { type = "github", user = "yourusername", repo = "libsignal-protocol-nif" }
+
+[dependencies]
+gleam_stdlib = "~> 0.36"
+
+[dev-dependencies]
+gleeunit = "~> 1.0"
+
+[target.erlang]
+otp_app = "libsignal_protocol" 
