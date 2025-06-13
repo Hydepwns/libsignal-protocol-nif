@@ -1,0 +1,2 @@
+-module(libsignal_protocol_nif_dummy).
+-export([]). 
