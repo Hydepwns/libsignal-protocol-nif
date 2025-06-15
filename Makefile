@@ -12,7 +12,7 @@ ifeq ($(shell uname),Darwin)
         LDFLAGS += -L/opt/homebrew/opt/openssl/lib
     else
         CFLAGS += -I/usr/local/opt/openssl/include
-        LDFLAGS += -L/usr/local/opt/openssl/lib
+        LDFLAGS += -L/usr/local/opt/openssl/lib twice
     endif
     SHARED_EXT = dylib
 else ifeq ($(OS),Windows_NT)
@@ -31,15 +31,22 @@ endif
 # Default target
 all: build
 
+BUILD_DIR = c_src/build
+
 # Build the NIF
-build:
-	mkdir -p c_src/build
-	cd c_src/build && cmake .. && make
+build: $(BUILD_DIR)
+	cd $(BUILD_DIR) && cmake .. && make
+	mkdir -p ../../priv
+	cp priv/libsignal_protocol_nif.* ../../priv/
 
 # Clean build artifacts
 clean:
-	rm -rf c_src/build
+	rm -rf $(BUILD_DIR)
 	rm -rf priv/*.so priv/*.dylib priv/*.dll
+
+# Create build directory
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
 
 # Run tests
 test:

@@ -140,16 +140,17 @@ static ERL_NIF_TERM make_openssl_error(ErlNifEnv* env) {
 }
 
 // Helper function to check OpenSSL errors
+/*
 static int check_openssl_error(ErlNifEnv* env) {
     unsigned long err = ERR_get_error();
-    if (err) {
+    if (err != 0) {
         char err_buf[256];
         ERR_error_string_n(err, err_buf, sizeof(err_buf));
-        make_error(env, err_buf);
-        return 0;
+        return make_error(env, err_buf);
     }
-    return 1;
+    return 0;
 }
+*/
 
 // Key validation constants
 #define MIN_KEY_SIZE 32  // Minimum key size in bytes
@@ -217,20 +218,23 @@ static ERL_NIF_TERM set_cache_size(ErlNifEnv* env, int argc, const ERL_NIF_TERM 
 
 // NIF function definitions
 static ErlNifFunc nif_funcs[] = {
-    {"generate_identity_key_pair", 0, generate_identity_key_pair},
-    {"generate_pre_key", 1, generate_pre_key},
-    {"generate_signed_pre_key", 2, generate_signed_pre_key},
-    {"create_session", 2, create_session},
-    {"process_pre_key_bundle", 2, process_pre_key_bundle},
-    {"encrypt_message", 2, encrypt_message},
-    {"decrypt_message", 2, decrypt_message},
-    {"get_cache_stats", 1, get_cache_stats},
-    {"reset_cache_stats", 1, reset_cache_stats},
-    {"set_cache_size", 3, set_cache_size}
+    {"generate_identity_key_pair", 0, generate_identity_key_pair, 0},
+    {"generate_pre_key", 1, generate_pre_key, 0},
+    {"generate_signed_pre_key", 2, generate_signed_pre_key, 0},
+    {"create_session", 2, create_session, 0},
+    {"process_pre_key_bundle", 2, process_pre_key_bundle, 0},
+    {"encrypt_message", 2, encrypt_message, 0},
+    {"decrypt_message", 2, decrypt_message, 0},
+    {"get_cache_stats", 1, get_cache_stats, 0},
+    {"reset_cache_stats", 1, reset_cache_stats, 0},
+    {"set_cache_size", 3, set_cache_size, 0}
 };
 
 // Module load callback
 static int on_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info) {
+    (void)env;
+    (void)priv_data;
+    (void)load_info;
     if (!init_openssl()) {
         return -1;
     }
@@ -239,11 +243,13 @@ static int on_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info) {
 
 // Module unload callback
 static void on_unload(ErlNifEnv* env, void* priv_data) {
+    (void)env;
+    (void)priv_data;
     cleanup_openssl();
 }
 
 // NIF module definition with unload callback
-ERL_NIF_INIT(signal_nif, nif_funcs, on_load, NULL, NULL, on_unload)
+ERL_NIF_INIT(libsignal_protocol_nif, nif_funcs, on_load, NULL, NULL, on_unload)
 
 // Helper functions
 static ERL_NIF_TERM make_error(ErlNifEnv* env, const char* reason) {
@@ -310,7 +316,7 @@ static ERL_NIF_TERM key_to_binary(ErlNifEnv* env, EC_KEY* key, int is_public) {
         if (!buffer) {
             return make_error(env, "Failed to allocate binary");
         }
-        if (BN_bn2bin(bn, buffer) != len) {
+        if ((size_t)BN_bn2bin(bn, buffer) != len) {
             return make_openssl_error(env);
         }
     }
@@ -342,7 +348,7 @@ static ERL_NIF_TERM sign_data(ErlNifEnv* env, EC_KEY* key, const unsigned char* 
         return make_error(env, "Failed to allocate signature buffer");
     }
 
-    if (BN_bn2bin(r, buffer) != r_len || BN_bn2bin(s, buffer + r_len) != s_len) {
+    if ((size_t)BN_bn2bin(r, buffer) != r_len || (size_t)BN_bn2bin(s, buffer + r_len) != s_len) {
         ECDSA_SIG_free(sig);
         return make_openssl_error(env);
     }
@@ -351,39 +357,41 @@ static ERL_NIF_TERM sign_data(ErlNifEnv* env, EC_KEY* key, const unsigned char* 
     return signature;
 }
 
+/*
 static int verify_signature(EC_KEY* key, const unsigned char* data, size_t data_len,
-                          const unsigned char* signature, size_t sig_len) {
-    if (sig_len % 2 != 0) {
-        return 0;
-    }
-
-    size_t half_len = sig_len / 2;
-    BIGNUM* r = BN_bin2bn(signature, half_len, NULL);
-    BIGNUM* s = BN_bin2bn(signature + half_len, half_len, NULL);
-    if (!r || !s) {
-        if (r) BN_free(r);
-        if (s) BN_free(s);
-        return 0;
-    }
-
+                          const unsigned char* signature, size_t signature_len) {
     ECDSA_SIG* sig = ECDSA_SIG_new();
     if (!sig) {
-        BN_free(r);
-        BN_free(s);
         return 0;
     }
 
-    if (!ECDSA_SIG_set0(sig, r, s)) {
+    BIGNUM* r = BN_new();
+    BIGNUM* s = BN_new();
+    if (!r || !s) {
+        ECDSA_SIG_free(sig);
+        return 0;
+    }
+
+    size_t r_len = signature_len / 2;
+    size_t s_len = signature_len - r_len;
+
+    if (!BN_bin2bn(signature, r_len, r) || !BN_bin2bn(signature + r_len, s_len, s)) {
         BN_free(r);
         BN_free(s);
         ECDSA_SIG_free(sig);
         return 0;
     }
 
+    if (!ECDSA_SIG_set0(sig, r, s)) {
+        ECDSA_SIG_free(sig);
+        return 0;
+    }
+
     int result = ECDSA_do_verify(data, data_len, sig, key);
     ECDSA_SIG_free(sig);
-    return result;
+    return result == 1;
 }
+*/
 
 // Key derivation constants
 #define HKDF_INFO_LEN 1
@@ -401,7 +409,6 @@ static void add_root_key_to_cache(ratchet_state_t* state, const unsigned char* r
 static int derive_root_key(const unsigned char* dh_output, size_t dh_output_len,
                          const unsigned char* salt, size_t salt_len,
                          unsigned char* root_key) {
-    const unsigned char info[] = "SignalProtocol";
     return EVP_PBE_scrypt((const char*)dh_output, dh_output_len, salt, salt_len,
                          SCRYPT_N, SCRYPT_R, SCRYPT_P, 0, root_key, ROOT_KEY_LEN) == 1;
 }
@@ -409,7 +416,6 @@ static int derive_root_key(const unsigned char* dh_output, size_t dh_output_len,
 static int derive_chain_key(const unsigned char* root_key, size_t root_key_len,
                           const unsigned char* salt, size_t salt_len,
                           unsigned char* chain_key) {
-    const unsigned char info[] = "ChainKey";
     return EVP_PBE_scrypt((const char*)root_key, root_key_len, salt, salt_len,
                          SCRYPT_N, SCRYPT_R, SCRYPT_P, 0, chain_key, CHAIN_KEY_LEN) == 1;
 }
@@ -417,7 +423,6 @@ static int derive_chain_key(const unsigned char* root_key, size_t root_key_len,
 static int derive_message_key(const unsigned char* chain_key, size_t chain_key_len,
                             const unsigned char* salt, size_t salt_len,
                             unsigned char* message_key) {
-    const unsigned char info[] = "MessageKey";
     return EVP_PBE_scrypt((const char*)chain_key, chain_key_len, salt, salt_len,
                          SCRYPT_N, SCRYPT_R, SCRYPT_P, 0, message_key, MESSAGE_KEY_LEN) == 1;
 }
@@ -542,15 +547,22 @@ static int add_message_key(ratchet_chain_t* chain, const unsigned char* message_
     return 1;
 }
 
+/*
 static int get_message_key(ratchet_chain_t* chain, uint32_t index, unsigned char* message_key) {
-    for (size_t i = 0; i < chain->message_key_count; i++) {
-        if (chain->message_keys[i].index == index) {
-            memcpy(message_key, chain->message_keys[i].key, MESSAGE_KEY_LEN);
-            return 1;
-        }
+    if (index < chain->index) {
+        return 0;
     }
-    return 0;
+
+    while (chain->index < index) {
+        if (!derive_chain_key(chain->chain_key, CHAIN_KEY_LEN, NULL, 0, chain->chain_key)) {
+            return 0;
+        }
+        chain->index++;
+    }
+
+    return derive_message_key(chain->chain_key, CHAIN_KEY_LEN, NULL, 0, message_key);
 }
+*/
 
 static int rotate_sending_ratchet(ratchet_state_t* state) {
     // Generate new DH key pair
@@ -658,6 +670,7 @@ static int rotate_receiving_ratchet(ratchet_state_t* state, EC_KEY* their_dh_key
 }
 
 // Message key skipping functions
+/*
 static int add_skip_key(ratchet_chain_t* chain, const unsigned char* message_key,
                        uint32_t index, uint32_t ratchet_index) {
     if (chain->skip_key_count >= MAX_SKIP_KEYS) {
@@ -685,19 +698,24 @@ static int add_skip_key(ratchet_chain_t* chain, const unsigned char* message_key
 
     return 1;
 }
+*/
 
+/*
 static int get_skip_key(ratchet_chain_t* chain, uint32_t index, uint32_t ratchet_index,
-                       unsigned char* message_key) {
-    for (size_t i = 0; i < chain->skip_key_count; i++) {
-        if (chain->skip_keys[i].index == index &&
-            chain->skip_keys[i].ratchet_index == ratchet_index) {
-            memcpy(message_key, chain->skip_keys[i].key, MESSAGE_KEY_LEN);
-            return 1;
-        }
+                       unsigned char* skip_key) {
+    if (index < chain->index) {
+        return 0;
     }
-    return 0;
-}
 
+    if (index - chain->index > MAX_SKIP) {
+        return 0;
+    }
+
+    return derive_skip_key(chain->chain_key, CHAIN_KEY_LEN, index, ratchet_index, skip_key);
+}
+*/
+
+/*
 static int derive_skip_keys(ratchet_chain_t* chain, uint32_t target_index,
                           uint32_t ratchet_index) {
     if (target_index <= chain->chain_index) {
@@ -737,6 +755,7 @@ static int derive_skip_keys(ratchet_chain_t* chain, uint32_t target_index,
 
     return 1;
 }
+*/
 
 // Message key cleanup functions
 static void cleanup_message_keys(ratchet_chain_t* chain) {
@@ -807,6 +826,7 @@ static void cleanup_keys(ratchet_state_t* state) {
 }
 
 // Adaptive cache sizing functions
+/*
 static void init_cache_stats(cache_stats_t* stats, size_t initial_size, size_t max_size) {
     stats->hits = 0;
     stats->misses = 0;
@@ -815,6 +835,7 @@ static void init_cache_stats(cache_stats_t* stats, size_t initial_size, size_t m
     stats->hit_ratio = 0.0;
     stats->last_adjustment = 0;
 }
+*/
 
 static void update_cache_stats(cache_stats_t* stats, int hit) {
     if (hit) {
@@ -915,19 +936,20 @@ static void add_chain_key_to_cache(ratchet_state_t* state, const unsigned char* 
 }
 
 // Update get_cached_root_key to use adaptive sizing
+/*
 static int get_cached_root_key(ratchet_state_t* state, uint32_t ratchet_index,
-                             unsigned char* root_key) {
-    for (size_t i = 0; i < state->root_key_cache_count; i++) {
-        if (state->root_key_cache[i].ratchet_index == ratchet_index) {
-            memcpy(root_key, state->root_key_cache[i].root_key, ROOT_KEY_LEN);
-            update_cache_stats(&state->root_key_stats, 1);
-            return 1;
-        }
+                              unsigned char* root_key) {
+    if (ratchet_index < state->ratchet_index) {
+        return 0;
     }
-    update_cache_stats(&state->root_key_stats, 0);
-    adjust_cache_size(&state->root_key_stats, &state->root_key_cache_size);
-    return 0;
+
+    if (ratchet_index - state->ratchet_index > MAX_SKIP) {
+        return 0;
+    }
+
+    return derive_root_key(state->root_key, ROOT_KEY_LEN, NULL, 0, root_key);
 }
+*/
 
 // Update add_root_key_to_cache to use adaptive sizing
 static void add_root_key_to_cache(ratchet_state_t* state, const unsigned char* root_key,
@@ -963,32 +985,9 @@ static void add_root_key_to_cache(ratchet_state_t* state, const unsigned char* r
     state->root_key_cache_count++;
 }
 
-// Update init_ratchet_state to initialize adaptive caches
-static int init_ratchet_state(ratchet_state_t* state) {
-    // Initialize chain key cache
-    state->chain_key_cache = OPENSSL_malloc(MIN_CHAIN_KEY_CACHE_SIZE * sizeof(chain_key_cache_t));
-    if (!state->chain_key_cache) {
-        return 0;
-    }
-    state->chain_key_cache_size = MIN_CHAIN_KEY_CACHE_SIZE;
-    state->chain_key_cache_count = 0;
-    init_cache_stats(&state->chain_key_stats, MIN_CHAIN_KEY_CACHE_SIZE, MAX_CHAIN_KEY_CACHE_SIZE);
-
-    // Initialize root key cache
-    state->root_key_cache = OPENSSL_malloc(MIN_ROOT_KEY_CACHE_SIZE * sizeof(root_key_cache_t));
-    if (!state->root_key_cache) {
-        OPENSSL_free(state->chain_key_cache);
-        return 0;
-    }
-    state->root_key_cache_size = MIN_ROOT_KEY_CACHE_SIZE;
-    state->root_key_cache_count = 0;
-    init_cache_stats(&state->root_key_stats, MIN_ROOT_KEY_CACHE_SIZE, MAX_ROOT_KEY_CACHE_SIZE);
-
-    return 1;
-}
-
 // NIF implementations
 static ERL_NIF_TERM generate_identity_key_pair(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc; (void)argv;
     EC_KEY* key;
     ERL_NIF_TERM public_key, private_key;
 
@@ -1004,6 +1003,7 @@ static ERL_NIF_TERM generate_identity_key_pair(ErlNifEnv* env, int argc, const E
 }
 
 static ERL_NIF_TERM generate_pre_key(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc; (void)argv;
     int key_id;
     EC_KEY* key;
     ERL_NIF_TERM public_key;
@@ -1023,6 +1023,7 @@ static ERL_NIF_TERM generate_pre_key(ErlNifEnv* env, int argc, const ERL_NIF_TER
 }
 
 static ERL_NIF_TERM generate_signed_pre_key(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc; (void)argv;
     ErlNifBinary identity_key;
     int key_id;
     EC_KEY* key;
@@ -1045,6 +1046,7 @@ static ERL_NIF_TERM generate_signed_pre_key(ErlNifEnv* env, int argc, const ERL_
 }
 
 static ERL_NIF_TERM create_session(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc; (void)argv;
     ErlNifBinary local_identity_key, remote_identity_key;
     ERL_NIF_TERM session_id;
 
@@ -1064,6 +1066,7 @@ static ERL_NIF_TERM create_session(ErlNifEnv* env, int argc, const ERL_NIF_TERM 
 }
 
 static ERL_NIF_TERM process_pre_key_bundle(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc; (void)argv;
     ErlNifBinary session, bundle;
     if (!enif_inspect_binary(env, argv[0], &session) ||
         !enif_inspect_binary(env, argv[1], &bundle)) {
@@ -1262,8 +1265,7 @@ static ERL_NIF_TERM process_pre_key_bundle(ErlNifEnv* env, int argc, const ERL_N
 
     // Derive root key
     unsigned char root_key[ROOT_KEY_LEN];
-    const unsigned char salt[] = "SignalProtocol";
-    if (!derive_root_key(master_secret, sizeof(master_secret), salt, sizeof(salt), root_key)) {
+    if (!derive_root_key(master_secret, sizeof(master_secret), NULL, 0, root_key)) {
         EC_KEY_free(ephemeral_key);
         EC_POINT_free(identity_point);
         EC_KEY_free(identity_key_ec);
@@ -1275,7 +1277,7 @@ static ERL_NIF_TERM process_pre_key_bundle(ErlNifEnv* env, int argc, const ERL_N
 
     // Derive chain key
     unsigned char chain_key[CHAIN_KEY_LEN];
-    if (!derive_chain_key(root_key, ROOT_KEY_LEN, salt, sizeof(salt), chain_key)) {
+    if (!derive_chain_key(root_key, ROOT_KEY_LEN, NULL, 0, chain_key)) {
         EC_KEY_free(ephemeral_key);
         EC_POINT_free(identity_point);
         EC_KEY_free(identity_key_ec);
@@ -1311,6 +1313,7 @@ static ERL_NIF_TERM process_pre_key_bundle(ErlNifEnv* env, int argc, const ERL_N
 }
 
 static ERL_NIF_TERM encrypt_message(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc; (void)argv;
     ErlNifBinary session, message;
     if (!enif_inspect_binary(env, argv[0], &session) ||
         !enif_inspect_binary(env, argv[1], &message)) {
@@ -1467,6 +1470,7 @@ static ERL_NIF_TERM encrypt_message(ErlNifEnv* env, int argc, const ERL_NIF_TERM
 }
 
 static ERL_NIF_TERM decrypt_message(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc; (void)argv;
     ErlNifBinary session, encrypted, header;
     if (!enif_inspect_binary(env, argv[0], &session) ||
         !enif_inspect_binary(env, argv[1], &encrypted) ||
@@ -1634,6 +1638,7 @@ static ERL_NIF_TERM decrypt_message(ErlNifEnv* env, int argc, const ERL_NIF_TERM
 
 // Cache statistics NIF functions
 static ERL_NIF_TERM get_cache_stats(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc; (void)argv;
     ErlNifBinary session;
     if (!enif_inspect_binary(env, argv[0], &session)) {
         return make_error(env, "Invalid session data");
@@ -1714,6 +1719,7 @@ static ERL_NIF_TERM get_cache_stats(ErlNifEnv* env, int argc, const ERL_NIF_TERM
 }
 
 static ERL_NIF_TERM reset_cache_stats(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc; (void)argv;
     ErlNifBinary session;
     if (!enif_inspect_binary(env, argv[0], &session)) {
         return make_error(env, "Invalid session data");
@@ -1741,6 +1747,7 @@ static ERL_NIF_TERM reset_cache_stats(ErlNifEnv* env, int argc, const ERL_NIF_TE
 }
 
 static ERL_NIF_TERM set_cache_size(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    (void)argc; (void)argv;
     ErlNifBinary session;
     int cache_type;
     unsigned long new_size;

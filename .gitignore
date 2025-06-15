@@ -1,4 +1,5 @@
 _build/
+.DS_Store
 *.beam
 *.o
 *.so
@@ -10,4 +11,5 @@ tmp/
 priv/
 rebar3.crashdump
 ct_log_cache
-c_src/build/ 
+c_src/build/
+.vscode/
