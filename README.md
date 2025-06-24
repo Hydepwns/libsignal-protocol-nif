@@ -29,19 +29,28 @@ libsignal-protocol-nif/
 ├── c_src/              # C source files and NIF implementation
 │   ├── crypto/        # Cryptographic primitives
 │   ├── protocol/      # Signal Protocol implementation
-│   ├── nif/          # NIF interface
-│   └── cmake/        # CMake configuration
-├── src/               # Erlang source files
-├── lib/               # Additional Erlang modules
-├── include/           # Type definitions
+│   ├── nif.c         # Main NIF interface
+│   ├── CMakeLists.txt # CMake configuration
+│   └── build/        # Build artifacts
+├── erl_src/           # Erlang source files
+│   ├── lib/          # Additional Erlang modules
+│   ├── include/      # Type definitions
+│   ├── nif.erl      # Main NIF module
+│   └── session.erl  # Session management
 ├── test/              # Test files
+│   ├── erl/         # Erlang tests
+│   ├── elixir/      # Elixir tests
+│   ├── gleam/       # Gleam tests
+│   └── performance/ # Performance benchmarks
 ├── wrappers/          # Language-specific wrappers
 │   ├── elixir/       # Elixir wrapper
 │   └── gleam/        # Gleam wrapper
 ├── scripts/           # Build and release scripts
-├── docker-compose.yml # Containerized testing
-├── Dockerfile         # Multi-stage Docker build
-└── .vscode/          # VS Code configuration
+├── docker/           # Docker configuration
+├── priv/             # Compiled NIF binaries
+├── Makefile          # Build automation
+├── rebar.config      # Rebar3 configuration
+└── VERSION           # Current version (0.1.0)
 ```
 
 ## Prerequisites
@@ -50,25 +59,31 @@ libsignal-protocol-nif/
 - `make`
 - C compiler (GCC/Clang)
 - CMake 3.10+
+- OpenSSL development libraries
 
 ### Platform-Specific Requirements
 
 #### macOS
 
 ```bash
+# Install Xcode Command Line Tools
 xcode-select --install
+
+# Install OpenSSL (if not already installed)
+brew install openssl@3
 ```
 
 #### Ubuntu/Debian
 
 ```bash
-sudo apt-get install build-essential cmake
+sudo apt-get install build-essential cmake libssl-dev
 ```
 
 #### Windows
 
 - Visual Studio 2019 or later
 - CMake
+- OpenSSL development libraries
 
 ## Installation
 
@@ -89,7 +104,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:libsignal_protocol, "~> 0.1.0"}
+    {:libsignal_protocol_nif, "~> 0.1.0"}
   ]
 end
 ```
