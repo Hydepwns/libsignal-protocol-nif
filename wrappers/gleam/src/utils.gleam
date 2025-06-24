@@ -1,17 +1,15 @@
-import gleam/erlang
-import gleam/option.{None, Some}
+import gleam/int
 import gleam/result
-import signal_protocol
-import signal_protocol/pre_key_bundle
-import signal_protocol/session
+import pre_key_bundle
+import session
+import signal_protocol.{
+  type IdentityKeyPair, type PreKey, type PreKeyBundle, type Session,
+  type SignedPreKey,
+}
 
 /// Generates a complete set of keys for a new user.
 pub fn generate_user_keys() -> Result(
-  #(
-    signal_protocol.IdentityKeyPair,
-    signal_protocol.PreKey,
-    signal_protocol.SignedPreKey,
-  ),
+  #(IdentityKeyPair, PreKey, SignedPreKey),
   String,
 ) {
   case signal_protocol.generate_identity_key_pair() {
@@ -40,39 +38,36 @@ pub fn generate_user_keys() -> Result(
 /// Creates a pre-key bundle from user keys.
 pub fn create_user_bundle(
   registration_id: Int,
-  identity_key_pair: signal_protocol.IdentityKeyPair,
-  pre_key: signal_protocol.PreKey,
-  signed_pre_key: signal_protocol.SignedPreKey,
-) -> Result(signal_protocol.PreKeyBundle, String) {
+  identity_key: String,
+  pre_key: PreKey,
+  signed_pre_key: SignedPreKey,
+) -> Result(PreKeyBundle, String) {
   pre_key_bundle.create(
     registration_id,
-    identity_key_pair.public_key,
+    identity_key,
     pre_key,
     signed_pre_key,
-    <<0:256>>,
+    "0",
     // Base key will be generated during session creation
   )
 }
 
 /// Establishes a session between two users using their pre-key bundles.
 pub fn establish_session(
-  local_identity_key: BitString,
+  local_identity_key: String,
   local_registration_id: Int,
-  local_pre_key: signal_protocol.PreKey,
-  local_signed_pre_key: signal_protocol.SignedPreKey,
-  remote_identity_key: BitString,
+  local_pre_key: PreKey,
+  local_signed_pre_key: SignedPreKey,
+  remote_identity_key: String,
   remote_registration_id: Int,
-  remote_pre_key: signal_protocol.PreKey,
-  remote_signed_pre_key: signal_protocol.SignedPreKey,
-) -> Result(#(session.Session, session.Session), String) {
+  remote_pre_key: PreKey,
+  remote_signed_pre_key: SignedPreKey,
+) -> Result(#(Session, Session), String) {
   // Create local bundle
   case
     create_user_bundle(
       local_registration_id,
-      signal_protocol.IdentityKeyPair(
-        public_key: local_identity_key,
-        signature: <<>>,
-      ),
+      local_identity_key,
       local_pre_key,
       local_signed_pre_key,
     )
@@ -82,10 +77,7 @@ pub fn establish_session(
       case
         create_user_bundle(
           remote_registration_id,
-          signal_protocol.IdentityKeyPair(
-            public_key: remote_identity_key,
-            signature: <<>>,
-          ),
+          remote_identity_key,
           remote_pre_key,
           remote_signed_pre_key,
         )
@@ -140,9 +132,9 @@ pub fn establish_session(
 
 /// Sends a message and returns both the ciphertext and the session.
 pub fn send_message_with_session(
-  session: session.Session,
-  message: BitString,
-) -> Result(#(BitString, session.Session), String) {
+  session: Session,
+  message: String,
+) -> Result(#(String, Session), String) {
   case session.encrypt_message(session, message) {
     Ok(ciphertext) -> {
       Ok(#(ciphertext, session))
@@ -153,9 +145,9 @@ pub fn send_message_with_session(
 
 /// Receives a message and returns both the plaintext and the session.
 pub fn receive_message_with_session(
-  session: session.Session,
-  ciphertext: BitString,
-) -> Result(#(BitString, session.Session), String) {
+  session: Session,
+  ciphertext: String,
+) -> Result(#(String, Session), String) {
   case session.decrypt_message(session, ciphertext) {
     Ok(message) -> {
       Ok(#(message, session))
@@ -166,10 +158,10 @@ pub fn receive_message_with_session(
 
 /// Performs a complete message exchange between two sessions.
 pub fn exchange_messages(
-  local_session: session.Session,
-  remote_session: session.Session,
-  message: BitString,
-) -> Result(#(BitString, session.Session, session.Session), String) {
+  local_session: Session,
+  remote_session: Session,
+  message: String,
+) -> Result(#(String, Session, Session), String) {
   case send_message_with_session(local_session, message) {
     Ok(#(ciphertext, local_session)) -> {
       case receive_message_with_session(remote_session, ciphertext) {
@@ -185,8 +177,8 @@ pub fn exchange_messages(
 
 /// Verifies that a message exchange was successful by comparing the sent and received messages.
 pub fn verify_message_exchange(
-  sent_message: BitString,
-  received_message: BitString,
+  sent_message: String,
+  received_message: String,
 ) -> Result(Nil, String) {
   case sent_message == received_message {
     True -> Ok(Nil)

@@ -1,10 +1,8 @@
 # libsignal-protocol-gleam
 
-Gleam wrapper for the Signal Protocol NIF library.
+Gleam wrapper for Signal Protocol NIF with FFI integration to Elixir.
 
 ## Installation
-
-Add to your `gleam.toml`:
 
 ```toml
 [dependencies]
@@ -14,35 +12,19 @@ libsignal_protocol_gleam = "~> 0.1.0"
 ## Usage
 
 ```gleam
-import libsignal_protocol_gleam
+import signal_protocol
 
 pub fn main() {
-  // Initialize the library
-  case libsignal_protocol_gleam.init() {
-    Ok(_) -> {
-      // Generate identity keys
-      case libsignal_protocol_gleam.generate_identity_key_pair() {
-        Ok(identity_pair) -> {
-          // Create a session
-          case libsignal_protocol_gleam.create_session(
-            identity_pair.public_key,
-            remote_identity_key
-          ) {
-            Ok(session) -> {
-              // Encrypt a message
-              case libsignal_protocol_gleam.encrypt_message(session, "Hello!") {
-                Ok(encrypted) -> {
-                  // Decrypt the message
-                  case libsignal_protocol_gleam.decrypt_message(session, encrypted) {
-                    Ok(decrypted) -> {
-                      // Use decrypted message
-                      Ok(decrypted)
-                    }
-                    Error(e) -> Error(e)
-                  }
-                }
-                Error(e) -> Error(e)
-              }
+  // Generate keys
+  case signal_protocol.generate_identity_key_pair() {
+    Ok(identity_pair) -> {
+      // Create session
+      case signal_protocol.create_session(identity_pair.public_key, remote_key) {
+        Ok(session) -> {
+          // Encrypt/decrypt
+          case signal_protocol.encrypt_message(session, "Hello") {
+            Ok(encrypted) -> {
+              signal_protocol.decrypt_message(session, encrypted)
             }
             Error(e) -> Error(e)
           }
@@ -55,39 +37,55 @@ pub fn main() {
 }
 ```
 
-## API Reference
+## API
 
-### Types
+### signal_protocol
 
-- `Session` - Represents a Signal Protocol session
-- `PreKeyBundle` - Represents a pre-key bundle for session establishment
-- `IdentityKeyPair` - Represents an identity key pair
-- `PreKey` - Represents a pre-key
-- `SignedPreKey` - Represents a signed pre-key
+- `generate_identity_key_pair()` → `Result(IdentityKeyPair, String)`
+- `generate_pre_key(id: Int)` → `Result(PreKey, String)`
+- `generate_signed_pre_key(identity_key: String, id: Int)` → `Result(SignedPreKey, String)`
+- `create_session(local: String, remote: String)` → `Result(Session, String)`
+- `encrypt_message(session: Session, message: String)` → `Result(String, String)`
+- `decrypt_message(session: Session, ciphertext: String)` → `Result(String, String)`
 
-### Functions
+### signal_protocol/session
 
-- `init()` - Initialize the Signal Protocol library
-- `generate_identity_key_pair()` - Generate a new identity key pair
-- `generate_pre_key(key_id)` - Generate a new pre-key
-- `generate_signed_pre_key(identity_key, key_id)` - Generate a signed pre-key
-- `create_session(local_identity_key, remote_identity_key)` - Create a new session
-- `process_pre_key_bundle(session, bundle)` - Process a pre-key bundle
-- `encrypt_message(session, message)` - Encrypt a message
-- `decrypt_message(session, ciphertext)` - Decrypt a message
+- `create(local: String, remote: String)` → `Result(Session, String)`
+- `send_message(session: Session, message: String)` → `Result(String, String)`
+- `receive_message(session: Session, ciphertext: String)` → `Result(String, String)`
 
-## Building
+### signal_protocol/pre_key_bundle
+
+- `create(reg_id: Int, identity: String, pre_key: PreKey, signed_pre_key: SignedPreKey, base_key: String)` → `Result(PreKeyBundle, String)`
+- `parse(bundle: String)` → `Result(PreKeyBundle, String)`
+- `verify_signature(bundle: PreKeyBundle)` → `Result(Nil, String)`
+
+### signal_protocol/utils
+
+- `generate_user_keys()` → `Result(#(IdentityKeyPair, PreKey, SignedPreKey), String)`
+- `establish_session(...)` → `Result(#(Session, Session), String)`
+- `exchange_messages(local: Session, remote: Session, message: String)` → `Result(#(String, Session, Session), String)`
+
+## Build
 
 ```bash
+cd wrappers/gleam
 gleam build
 ```
 
-## Testing
+## Test
 
 ```bash
+cd wrappers/gleam
 gleam test
 ```
 
+## Requirements
+
+- Gleam 0.37+
+- Erlang/OTP 25+
+- Elixir SignalProtocol implementation
+
 ## License
 
-MIT License - see the main project LICENSE file for details.
+MIT

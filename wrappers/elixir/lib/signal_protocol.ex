@@ -26,7 +26,7 @@ defmodule SignalProtocol do
   Returns `{:ok, {public_key, signature}}` on success.
   """
   def generate_identity_key_pair do
-    case :signal_nif.generate_identity_key_pair() do
+    case :libsignal_protocol_nif.generate_identity_key_pair() do
       {:ok, {public_key, signature}} ->
         {:ok, {public_key, signature}}
       {:error, reason} ->
@@ -40,7 +40,7 @@ defmodule SignalProtocol do
   Returns `{:ok, {key_id, public_key}}` on success.
   """
   def generate_pre_key(key_id) when is_integer(key_id) do
-    case :signal_nif.generate_pre_key(key_id) do
+    case :libsignal_protocol_nif.generate_pre_key(key_id) do
       {:ok, {key_id, public_key}} ->
         {:ok, {key_id, public_key}}
       {:error, reason} ->
@@ -55,7 +55,7 @@ defmodule SignalProtocol do
   """
   def generate_signed_pre_key(identity_key, key_id)
       when is_binary(identity_key) and is_integer(key_id) do
-    case :signal_nif.generate_signed_pre_key(identity_key, key_id) do
+    case :libsignal_protocol_nif.generate_signed_pre_key(identity_key, key_id) do
       {:ok, {key_id, public_key, signature}} ->
         {:ok, {key_id, public_key, signature}}
       {:error, reason} ->
@@ -71,7 +71,7 @@ defmodule SignalProtocol do
   """
   def create_session(local_identity_key, remote_identity_key)
       when is_binary(local_identity_key) and is_binary(remote_identity_key) do
-    case :signal_nif.create_session(local_identity_key, remote_identity_key) do
+    case :libsignal_protocol_nif.create_session(local_identity_key, remote_identity_key) do
       {:ok, session} ->
         {:ok, session}
       {:error, reason} ->
@@ -86,7 +86,7 @@ defmodule SignalProtocol do
   """
   def process_pre_key_bundle(session, bundle)
       when is_reference(session) and is_binary(bundle) do
-    case :signal_nif.process_pre_key_bundle(session, bundle) do
+    case :libsignal_protocol_nif.process_pre_key_bundle(session, bundle) do
       :ok -> :ok
       {:error, reason} -> {:error, reason}
     end
@@ -99,7 +99,7 @@ defmodule SignalProtocol do
   """
   def encrypt_message(session, message)
       when is_reference(session) and is_binary(message) do
-    case :signal_nif.encrypt_message(session, message) do
+    case :libsignal_protocol_nif.encrypt_message(session, message) do
       {:ok, ciphertext} ->
         {:ok, ciphertext}
       {:error, reason} ->
@@ -114,7 +114,7 @@ defmodule SignalProtocol do
   """
   def decrypt_message(session, ciphertext)
       when is_reference(session) and is_binary(ciphertext) do
-    case :signal_nif.decrypt_message(session, ciphertext) do
+    case :libsignal_protocol_nif.decrypt_message(session, ciphertext) do
       {:ok, plaintext} ->
         {:ok, plaintext}
       {:error, reason} ->

@@ -29,7 +29,7 @@ defmodule SignalProtocol.PreKeyBundle do
     {signed_pre_key_id, signed_pre_key_public, signed_pre_key_signature} = signed_pre_key
 
     # Calculate bundle size for validation (internal use only)
-    bundle_size = 1 + # version
+    _bundle_size = 1 + # version
                   4 + # registration_id
                   4 + # pre_key_id
                   4 + # signed_pre_key_id
