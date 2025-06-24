@@ -1,23 +1,15 @@
--module(signal_protocol).
+-module(protocol).
 
--export([
-    start/0,
-    stop/0,
-    generate_identity_key_pair/0,
-    generate_pre_key/1,
-    generate_signed_pre_key/2,
-    create_session/2,
-    process_pre_key_bundle/2,
-    encrypt_message/2,
-    decrypt_message/2
-]).
+-export([start/0, stop/0, generate_identity_key_pair/0, generate_pre_key/1,
+         generate_signed_pre_key/2, create_session/2, process_pre_key_bundle/2, encrypt_message/2,
+         decrypt_message/2]).
 
 -behaviour(gen_server).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--record(state, {
-    sessions = #{} :: map()
-}).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+         code_change/3]).
+
+-record(state, {sessions = #{} :: map()}).
 
 %% Public API
 
@@ -54,33 +46,26 @@ init([]) ->
     {ok, #state{}}.
 
 handle_call(generate_identity_key_pair, _From, State) ->
-    Result = signal_nif:generate_identity_key_pair(),
+    Result = nif:generate_identity_key_pair(),
     {reply, Result, State};
-
 handle_call({generate_pre_key, KeyId}, _From, State) ->
-    Result = signal_nif:generate_pre_key(KeyId),
+    Result = nif:generate_pre_key(KeyId),
     {reply, Result, State};
-
 handle_call({generate_signed_pre_key, IdentityKey, KeyId}, _From, State) ->
-    Result = signal_nif:generate_signed_pre_key(IdentityKey, KeyId),
+    Result = nif:generate_signed_pre_key(IdentityKey, KeyId),
     {reply, Result, State};
-
-handle_call({create_session, LocalIdentityKey, RemoteIdentityKey}, _From, State) ->
-    Result = signal_nif:create_session(LocalIdentityKey, RemoteIdentityKey),
+handle_call({create_session, LocalIdentityKey, _RemoteIdentityKey}, _From, State) ->
+    Result = nif:create_session(LocalIdentityKey),
     {reply, Result, State};
-
 handle_call({process_pre_key_bundle, Session, Bundle}, _From, State) ->
-    Result = signal_nif:process_pre_key_bundle(Session, Bundle),
+    Result = nif:process_pre_key_bundle(Session, Bundle),
     {reply, Result, State};
-
 handle_call({encrypt_message, Session, Message}, _From, State) ->
-    Result = signal_nif:encrypt_message(Session, Message),
+    Result = nif:encrypt_message(Session, Message),
     {reply, Result, State};
-
 handle_call({decrypt_message, Session, Ciphertext}, _From, State) ->
-    Result = signal_nif:decrypt_message(Session, Ciphertext),
+    Result = nif:decrypt_message(Session, Ciphertext),
     {reply, Result, State};
-
 handle_call(_Request, _From, State) ->
     {reply, {error, unknown_call}, State}.
 
@@ -94,4 +79,4 @@ terminate(_Reason, _State) ->
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
-    {ok, State}. 
+    {ok, State}.
