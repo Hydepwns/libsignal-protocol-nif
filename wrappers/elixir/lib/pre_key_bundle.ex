@@ -28,7 +28,7 @@ defmodule SignalProtocol.PreKeyBundle do
     {pre_key_id, pre_key_public} = pre_key
     {signed_pre_key_id, signed_pre_key_public, signed_pre_key_signature} = signed_pre_key
 
-    # Calculate bundle size
+    # Calculate bundle size for validation (internal use only)
     bundle_size = 1 + # version
                   4 + # registration_id
                   4 + # pre_key_id
@@ -98,7 +98,7 @@ defmodule SignalProtocol.PreKeyBundle do
   """
   def verify_signature(bundle) when is_binary(bundle) do
     case parse(bundle) do
-      {:ok, %{signed_pre_key_public: public_key, signed_pre_key_signature: signature}} ->
+      {:ok, %{signed_pre_key_public: _public_key, signed_pre_key_signature: signature}} ->
         # In a real implementation, this would verify the signature using the identity key
         # For this example, we'll just check that the signature is the correct length
         if byte_size(signature) == 64 do
