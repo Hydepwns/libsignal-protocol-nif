@@ -53,7 +53,7 @@ ok = libsignal_protocol_nif:init(),
 
 ```elixir
 {:ok, pid} = SignalProtocol.start_link()
-{:ok, {pub, priv}} = SignalProtocol.generate_identity_key_pair()
+{:ok, {Pub, Priv}} = SignalProtocol.generate_identity_key_pair()
 {:ok, session} = SignalProtocol.create_session(Pub, RemotePub)
 {:ok, encrypted} = SignalProtocol.encrypt_message(session, "Hello!")
 {:ok, decrypted} = SignalProtocol.decrypt_message(session, encrypted)
@@ -92,6 +92,21 @@ case libsignal_protocol_gleam.init() {
 
 ### Unified Build (Recommended)
 
+```bash
+make build      # Build everything
+make test       # Run tests
 ```
 
+### Platform-Specific Builds
+
+```bash
+make build-erlang  # Build Erlang NIF
+make build-elixir  # Build Elixir wrapper
+make build-gleam   # Build Gleam wrapper
+```
+
+### Testing
+
+```bash
+make test       # Run tests
 ```
