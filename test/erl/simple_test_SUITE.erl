@@ -11,12 +11,9 @@ all() ->
 init_per_suite(Config) ->
     % Start the application to ensure priv_dir is available
     application:ensure_all_started(nif),
-    % Initialize crypto
-    crypto:start(),
     Config.
 
 end_per_suite(_Config) ->
-    crypto:stop(),
     ok.
 
 test_basic_functionality(_Config) ->
@@ -33,7 +30,7 @@ test_nif_loading(_Config) ->
         ok ->
             io:format("NIF loaded successfully~n"),
             % Try to call a simple wrapper function
-            case crypto:generate_key_pair() of
+            case signal_crypto:generate_key_pair() of
                 {ok, {PublicKey, PrivateKey}} ->
                     io:format("Wrapper function call successful~n"),
                     io:format("PublicKey type: ~p, value: ~p~n",
@@ -56,9 +53,9 @@ test_nif_loading(_Config) ->
 
 test_session(_Config) ->
     % Test session functionality
-    {ok, {LocalPublic, _}} = crypto:generate_key_pair(),
-    {ok, {RemotePublic, _}} = crypto:generate_key_pair(),
-    Session = session:new(LocalPublic, RemotePublic),
-    ?assert(is_binary(session:get_session_id(Session))),
+    {ok, {LocalPublic, _}} = signal_crypto:generate_key_pair(),
+    {ok, {RemotePublic, _}} = signal_crypto:generate_key_pair(),
+    Session = signal_session:new(LocalPublic, RemotePublic),
+    ?assert(is_binary(signal_session:get_session_id(Session))),
     ?assertEqual(LocalPublic, maps:get(local_identity_key, Session)),
     ?assertEqual(RemotePublic, maps:get(remote_identity_key, Session)).
