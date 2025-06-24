@@ -66,7 +66,10 @@ ok = libsignal_protocol_nif:init(),
 
 ### Installation
 
-See `wrappers/gleam/README.md`
+```toml
+[dependencies]
+libsignal_protocol_gleam = "~> 0.1.0"
+```
 
 ### Usage
 
