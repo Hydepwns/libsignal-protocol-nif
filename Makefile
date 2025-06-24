@@ -1,5 +1,5 @@
 # Variables
-ERLANG_PATH = $(shell erl -eval 'io:format("~s", [lists:concat([code:root_dir(), "/erts-", erlang:system_info(version), "/include"])])' -s init stop -noshell)
+ERLANG_PATH = $(shell erl -eval 'io:format("~s", [lists:concat([code:root_dir(), "/erts-", erlang:system_info(version), "/erl_src/include"])])' -s init stop -noshell)
 ERL_INTERFACE_PATH = $(shell erl -eval 'io:format("~s", [code:lib_dir(erl_interface, include)])' -s init stop -noshell)
 CFLAGS = -I$(ERLANG_PATH) -I$(ERL_INTERFACE_PATH) -Iinclude -fPIC -O3 -Wall -Wextra
 LDFLAGS = -L$(shell erl -eval 'io:format("~s", [code:lib_dir(erl_interface, lib)])' -s init stop -noshell)
@@ -36,12 +36,11 @@ BUILD_DIR = c_src/build
 
 build: $(BUILD_DIR)
 	cd $(BUILD_DIR) && cmake .. && make
-	mkdir -p $(PRIV_DIR)
-	# Copy NIF to both default and test profile priv directories
-	mkdir -p _build/default/lib/libsignal_protocol_nif/priv
-	mkdir -p _build/test/lib/libsignal_protocol_nif/priv
-	cp priv/libsignal_protocol_nif.dylib _build/default/lib/libsignal_protocol_nif/priv/ || true
-	cp priv/libsignal_protocol_nif.dylib _build/test/lib/libsignal_protocol_nif/priv/ || true
+	# Copy NIF to only the correct test and default profile priv directories
+	mkdir -p _build/default/lib/nif/priv
+	mkdir -p _build/test/lib/nif/priv
+	cp priv/nif.dylib _build/default/lib/nif/priv/ || true
+	cp priv/nif.dylib _build/test/lib/nif/priv/ || true
 
 # Clean build artifacts
 clean:
