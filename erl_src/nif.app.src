@@ -3,5 +3,5 @@
  [{description, "Signal Protocol NIF"},
   {vsn, "0.1.0"},
   {registered, []},
-  {applications, [kernel, stdlib, crypto, nif]},
+  {applications, [kernel, stdlib, crypto]},
   {env, []}]}.
