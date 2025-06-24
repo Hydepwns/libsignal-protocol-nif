@@ -65,6 +65,7 @@ add_library(nif SHARED
 set_target_properties(nif PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/../priv"
     OUTPUT_NAME "nif"
+    PREFIX ""  # Remove the "lib" prefix
 )
 
 # Link libraries for nif

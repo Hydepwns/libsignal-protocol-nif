@@ -262,7 +262,7 @@ static void on_unload(ErlNifEnv *env, void *priv_data)
 }
 
 // NIF module definition with unload callback
-ERL_NIF_INIT(libsignal_protocol_nif, nif_funcs, on_load, NULL, NULL, on_unload)
+ERL_NIF_INIT(nif, nif_funcs, on_load, NULL, NULL, on_unload)
 
 // Helper functions
 static ERL_NIF_TERM make_error(ErlNifEnv *env, const char *reason)
