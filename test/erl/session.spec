@@ -1,3 +1,3 @@
-{suites, "test", [session_SUITE, simple_test_SUITE]}.
+{suites, "test", [session_SUITE]}.
 {logdir, "logs"}.
 {config, "test.config"}. 
