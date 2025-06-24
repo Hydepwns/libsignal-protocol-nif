@@ -10,254 +10,88 @@ Cross-platform BEAM wrappers (Erlang/Elixir/Gleam) for the Signal Protocol libra
 - Cross-platform support (Linux, macOS, Windows)
 - OpenSSL-based cryptographic primitives
 
-## Project Structure
+## Quick Start
 
 ```bash
-libsignal-protocol-nif/
-├── c_src/              # C source files and NIF implementation
-│   ├── crypto/        # Cryptographic primitives
-│   ├── protocol/      # Signal Protocol implementation
-│   ├── nif.c         # Main NIF interface
-│   ├── CMakeLists.txt # CMake configuration
-│   └── build/        # Build artifacts
-├── erl_src/           # Erlang source files
-│   ├── lib/          # Additional Erlang modules
-│   ├── include/      # Type definitions
-│   ├── nif.erl      # Main NIF module
-│   └── session.erl  # Session management
-├── test/              # Test files
-│   ├── erl/         # Erlang tests
-│   ├── elixir/      # Elixir tests
-│   ├── gleam/       # Gleam tests
-│   └── performance/ # Performance benchmarks
-├── wrappers/          # Language-specific wrappers
-│   ├── elixir/       # Elixir wrapper
-│   └── gleam/        # Gleam wrapper
-├── scripts/           # Build and release scripts
-├── docker/           # Docker configuration
-├── priv/             # Compiled NIF binaries
-├── Makefile          # Build automation
-├── rebar.config      # Rebar3 configuration
-└── VERSION           # Current version (0.1.0)
+make build      # Build everything
+make test       # Run tests
 ```
 
-## Prerequisites
+## Installation & Usage
 
-- Erlang/OTP 22+
-- `make`
-- C compiler (GCC/Clang)
-- CMake 3.10+
-- OpenSSL development libraries
+<details>
+<summary><strong>Erlang</strong></summary>
 
-### Platform-Specific Requirements
-
-#### macOS
-
-```bash
-# Install Xcode Command Line Tools
-xcode-select --install
-
-# Install OpenSSL (if not already installed)
-brew install openssl@3
-```
-
-#### Ubuntu/Debian
-
-```bash
-sudo apt-get install build-essential cmake libssl-dev
-```
-
-#### Windows
-
-- Visual Studio 2019 or later
-- CMake
-- OpenSSL development libraries
-
-## Installation
-
-### Erlang
-
-Add to your `rebar.config`:
+### Installation
 
 ```erlang
-{deps, [
-  {libsignal_protocol_nif, {git, "https://github.com/Hydepwns/libsignal-protocol-nif.git"}}
-]}.
+{deps, [{libsignal_protocol_nif, {git, "https://github.com/Hydepwns/libsignal-protocol-nif.git"}}]}.
 ```
 
-### Elixir
-
-Add to your `mix.exs`:
-
-```elixir
-def deps do
-  [
-    {:libsignal_protocol_nif, "~> 0.1.0"}
-  ]
-end
-```
-
-### Gleam
-
-See `wrappers/gleam/README.md` for full instructions.
-
-## Usage
-
-### Erlang Quickstart
+### Usage
 
 ```erlang
-% Initialize the library
 ok = libsignal_protocol_nif:init(),
-
-% Generate identity key pair
-{ok, {PublicKey, PrivateKey}} = libsignal_protocol_nif:generate_identity_key_pair(),
-
-% Create a new session (requires both local and remote identity keys)
-{ok, Session} = libsignal_protocol_nif:create_session(LocalIdentityKey, RemoteIdentityKey),
-
-% Encrypt a message
-{ok, Encrypted} = libsignal_protocol_nif:encrypt_message(Session, "Hello, Signal!"),
-
-% Decrypt a message
+{ok, {Pub, Priv}} = libsignal_protocol_nif:generate_identity_key_pair(),
+{ok, Session} = libsignal_protocol_nif:create_session(Pub, RemotePub),
+{ok, Encrypted} = libsignal_protocol_nif:encrypt_message(Session, "Hello!"),
 {ok, Decrypted} = libsignal_protocol_nif:decrypt_message(Session, Encrypted).
 ```
 
-### Elixir Quickstart
+</details>
+
+<details>
+<summary><strong>Elixir</strong></summary>
+
+### Installation
 
 ```elixir
-# Start the Signal Protocol process
+{:libsignal_protocol_nif, "~> 0.1.0"}
+```
+
+### Usage
+
+```elixir
 {:ok, pid} = SignalProtocol.start_link()
-
-# Generate identity key pair
-{:ok, {public_key, signature}} = SignalProtocol.generate_identity_key_pair()
-
-# Create a new session (requires both local and remote identity keys)
-{:ok, session} = SignalProtocol.create_session(local_identity_key, remote_identity_key)
-
-# Encrypt a message
-{:ok, encrypted} = SignalProtocol.encrypt_message(session, "Hello, Signal!")
-
-# Decrypt a message
+{:ok, {pub, priv}} = SignalProtocol.generate_identity_key_pair()
+{:ok, session} = SignalProtocol.create_session(Pub, RemotePub)
+{:ok, encrypted} = SignalProtocol.encrypt_message(session, "Hello!")
 {:ok, decrypted} = SignalProtocol.decrypt_message(session, encrypted)
 ```
 
-### Gleam Quickstart
+</details>
+
+<details>
+<summary><strong>Gleam</strong></summary>
+
+### Installation
+
+See `wrappers/gleam/README.md`
+
+### Usage
 
 ```gleam
-import libsignal_protocol_gleam
-
-pub fn main() {
-  case libsignal_protocol_gleam.init() {
-    Ok(_) -> {
-      case libsignal_protocol_gleam.generate_identity_key_pair() {
-        Ok(identity_pair) -> {
-          case libsignal_protocol_gleam.create_session(
-            local_identity_key,
-            remote_identity_key
-          ) {
-            Ok(session) -> {
-              case libsignal_protocol_gleam.encrypt_message(session, "Hello, Signal!") {
-                Ok(encrypted) -> {
-                  case libsignal_protocol_gleam.decrypt_message(session, encrypted) {
-                    Ok(decrypted) -> {
-                      // Use decrypted message
-                    }
-                    Error(e) -> {
-                      // Handle error
-                    }
-                  }
-                }
-                Error(e) -> {
-                  // Handle error
-                }
-              }
-            }
-            Error(e) -> {
-              // Handle error
-            }
-          }
-        }
-        Error(e) -> {
-          // Handle error
-        }
+case libsignal_protocol_gleam.init() {
+  Ok(_) -> case libsignal_protocol_gleam.generate_identity_key_pair() {
+    Ok(keys) -> case libsignal_protocol_gleam.create_session(Pub, RemotePub) {
+      Ok(session) -> case libsignal_protocol_gleam.encrypt_message(session, "Hello!") {
+        Ok(encrypted) -> libsignal_protocol_gleam.decrypt_message(session, encrypted)
+        Error(e) -> Error(e)
       }
+      Error(e) -> Error(e)
     }
-    Error(e) -> {
-      // Handle error
-    }
+    Error(e) -> Error(e)
   }
+  Error(e) -> Error(e)
 }
 ```
+
+</details>
 
 ## Building
 
 ### Unified Build (Recommended)
 
-```bash
-make build      # Build everything (C, Erlang, Elixir, Gleam)
-make test       # Run all tests
-make clean      # Clean all build artifacts
 ```
 
-### Platform-Specific Build
-
-```bash
-# Linux/macOS
-make build
-
-# Windows
-make build
 ```
-
-## Testing
-
-```bash
-make test              # Run all tests
-make test-cover        # Run tests with coverage
-make perf-test         # Run performance benchmarks
-```
-
-## Docker Support
-
-```bash
-make docker-build      # Build Docker images
-make docker-test       # Run tests in Docker
-make docker-perf       # Run performance tests in Docker
-```
-
-## Development
-
-```bash
-make dev-setup         # Setup development environment
-make dev-test          # Run all development tests
-make docs              # Generate documentation
-```
-
-## Security
-
-This implementation:
-
-- Uses OpenSSL for cryptographic primitives
-- Implements Signal Protocol specifications exactly
-- Includes comprehensive security testing
-- Provides perfect forward secrecy
-- Implements proper key rotation
-- Uses secure memory handling
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Signal Protocol team for the protocol specification
-- BEAM community for NIF documentation and examples
-- Contributors and maintainers of the project
