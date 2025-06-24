@@ -12,7 +12,7 @@ ifeq ($(shell uname),Darwin)
         LDFLAGS += -L/opt/homebrew/opt/openssl/lib
     else
         CFLAGS += -I/usr/local/opt/openssl/include
-        LDFLAGS += -L/usr/local/opt/openssl/lib twice
+        LDFLAGS += -L/usr/local/opt/openssl/lib
     endif
     SHARED_EXT = dylib
 else ifeq ($(OS),Windows_NT)
@@ -31,20 +31,17 @@ endif
 # Default target
 all: build
 
+PRIV_DIR = priv
 BUILD_DIR = c_src/build
 
-# Determine if we're in a submodule of hydepwns
-ifeq ($(wildcard ../../.gitmodules),)
-    PRIV_DIR = priv
-else
-    PRIV_DIR = ../../priv
-endif
-
-# Build the NIF
 build: $(BUILD_DIR)
 	cd $(BUILD_DIR) && cmake .. && make
 	mkdir -p $(PRIV_DIR)
-	cp priv/libsignal_protocol_nif.* $(PRIV_DIR)/
+	# Copy NIF to both default and test profile priv directories
+	mkdir -p _build/default/lib/libsignal_protocol_nif/priv
+	mkdir -p _build/test/lib/libsignal_protocol_nif/priv
+	cp priv/libsignal_protocol_nif.dylib _build/default/lib/libsignal_protocol_nif/priv/ || true
+	cp priv/libsignal_protocol_nif.dylib _build/test/lib/libsignal_protocol_nif/priv/ || true
 
 # Clean build artifacts
 clean:
@@ -69,21 +66,21 @@ test-dirs:
 
 # Run tests
 test: test-dirs
-	rebar3 ct
+	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 ct
 
 # Run tests with coverage
 test-cover: test-dirs
-	rebar3 ct --cover
+	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 ct --cover
 
 # Run performance tests
 perf-test: test-dirs build
 	@echo "Running performance benchmarks..."
-	erl -noshell -pa ebin -pa test -eval "performance_test:run_benchmarks(), halt()."
+	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib erl -noshell -pa ebin -pa test -eval "performance_test:run_benchmarks(), halt()."
 
 # Run performance monitoring
 perf-monitor: test-dirs build
 	@echo "Starting performance monitoring..."
-	erl -noshell -pa ebin -pa test -eval "performance_test:run_benchmarks(), timer:sleep(5000), performance_test:run_benchmarks(), halt()."
+	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib erl -noshell -pa ebin -pa test -eval "performance_test:run_benchmarks(), timer:sleep(5000), performance_test:run_benchmarks(), halt()."
 
 # Generate documentation
 docs: test-dirs

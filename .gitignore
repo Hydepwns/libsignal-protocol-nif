@@ -1,4 +1,5 @@
 _build/
+build/
 .DS_Store
 *.beam
 *.o
@@ -13,3 +14,13 @@ rebar3.crashdump
 ct_log_cache
 c_src/build/
 .vscode/
+erl_crash.dump
+
+# Common Test output
+ct_run.*/
+test/erl/ct_run.*/
+test/erl/*.beam
+test/erl/*.dylib
+test/erl/*.so
+test/erl/ct_log_cache
+test/erl/erl_crash.dump
