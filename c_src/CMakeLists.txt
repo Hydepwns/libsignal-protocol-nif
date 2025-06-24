@@ -1,10 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 project(libsignal_protocol_nif C)
 
-# Set OpenSSL paths explicitly for arm64
-set(OPENSSL_ROOT_DIR "/opt/homebrew/opt/openssl@3")
-set(OPENSSL_INCLUDE_DIR "${OPENSSL_ROOT_DIR}/include")
-set(OPENSSL_LIBRARIES "${OPENSSL_ROOT_DIR}/lib/libssl.dylib" "${OPENSSL_ROOT_DIR}/lib/libcrypto.dylib")
+# Set C standard
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Find required packages
 find_package(OpenSSL REQUIRED)
@@ -15,9 +14,24 @@ execute_process(
   OUTPUT_VARIABLE ERLANG_ROOT
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
+
+# Try different possible Erlang include paths
 set(ERLANG_INCLUDE_DIR "${ERLANG_ROOT}/usr/include")
 if(NOT EXISTS "${ERLANG_INCLUDE_DIR}")
   set(ERLANG_INCLUDE_DIR "${ERLANG_ROOT}/include")
+endif()
+
+# Also try system paths for Erlang
+if(NOT EXISTS "${ERLANG_INCLUDE_DIR}")
+  set(ERLANG_INCLUDE_DIR "/opt/homebrew/lib/erlang/usr/include")
+endif()
+
+if(NOT EXISTS "${ERLANG_INCLUDE_DIR}")
+  set(ERLANG_INCLUDE_DIR "/usr/local/lib/erlang/usr/include")
+endif()
+
+if(NOT EXISTS "${ERLANG_INCLUDE_DIR}")
+  set(ERLANG_INCLUDE_DIR "/usr/lib/erlang/usr/include")
 endif()
 
 # Detect Erlang lib directory automatically
@@ -27,11 +41,13 @@ if(NOT EXISTS "${ERLANG_LIB_DIR}")
 endif()
 
 # Add include directories
-include_directories(${OPENSSL_INCLUDE_DIR} ${ERLANG_INCLUDE_DIR})
+include_directories(${OPENSSL_INCLUDE_DIRS} ${ERLANG_INCLUDE_DIR})
 
 # Add source files
 add_library(libsignal_protocol_nif SHARED
     libsignal_protocol_nif.c
+    crypto/crypto.c
+    protocol/signal_protocol.c
 )
 
 # Set output directory and name
@@ -43,8 +59,6 @@ set_target_properties(libsignal_protocol_nif PROPERTIES
 # Link libraries
 target_link_libraries(libsignal_protocol_nif
     ${OPENSSL_LIBRARIES}
-    ${ERLANG_LIB_DIR}/liberts.dylib
-    ${ERLANG_LIB_DIR}/libei.dylib
 )
 
 # Set compile flags based on platform
@@ -55,7 +69,6 @@ if(APPLE)
     )
     set_target_properties(libsignal_protocol_nif PROPERTIES
         SUFFIX ".dylib"
-        COMPILE_FLAGS "-arch arm64"
         LINK_FLAGS "-undefined dynamic_lookup"
     )
 elseif(UNIX)

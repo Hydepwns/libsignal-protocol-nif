@@ -19,6 +19,7 @@ target_include_directories(signal_nif PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/../protocol
     ${CMAKE_CURRENT_SOURCE_DIR}/../crypto
     ${ERLANG_INCLUDE_DIRS}
+    ${OPENSSL_INCLUDE_DIR}
 )
 
 # Link libraries
@@ -26,6 +27,7 @@ target_link_libraries(signal_nif
     signal_protocol
     crypto
     ${ERLANG_LIBRARIES}
+    ${OPENSSL_LIBRARIES}
 )
 
 # Set compiler flags

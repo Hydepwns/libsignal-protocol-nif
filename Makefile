@@ -26,31 +26,68 @@ else
 endif
 
 # Build targets
-.PHONY: all clean test deps install
+.PHONY: all clean test test-clean deps install perf-test perf-monitor docker-build docker-test release dev-setup dev-test monitor-memory monitor-cache help
 
 # Default target
 all: build
 
 BUILD_DIR = c_src/build
 
+# Determine if we're in a submodule of hydepwns
+ifeq ($(wildcard ../../.gitmodules),)
+    PRIV_DIR = priv
+else
+    PRIV_DIR = ../../priv
+endif
+
 # Build the NIF
 build: $(BUILD_DIR)
 	cd $(BUILD_DIR) && cmake .. && make
-	mkdir -p ../../priv
-	cp priv/libsignal_protocol_nif.* ../../priv/
+	mkdir -p $(PRIV_DIR)
+	cp priv/libsignal_protocol_nif.* $(PRIV_DIR)/
 
 # Clean build artifacts
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -rf priv/*.so priv/*.dylib priv/*.dll
 
+# Clean test artifacts
+test-clean:
+	rm -rf tmp/
+	rm -f *.log *.html *.xml *.cover
+
 # Create build directory
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
+# Create test directories
+test-dirs:
+	mkdir -p tmp/ct_logs
+	mkdir -p tmp/cover
+	mkdir -p tmp/doc
+	mkdir -p tmp/perf
+
 # Run tests
-test:
+test: test-dirs
 	rebar3 ct
+
+# Run tests with coverage
+test-cover: test-dirs
+	rebar3 ct --cover
+
+# Run performance tests
+perf-test: test-dirs build
+	@echo "Running performance benchmarks..."
+	erl -noshell -pa ebin -pa test -eval "performance_test:run_benchmarks(), halt()."
+
+# Run performance monitoring
+perf-monitor: test-dirs build
+	@echo "Starting performance monitoring..."
+	erl -noshell -pa ebin -pa test -eval "performance_test:run_benchmarks(), timer:sleep(5000), performance_test:run_benchmarks(), halt()."
+
+# Generate documentation
+docs: test-dirs
+	rebar3 edoc
 
 # Install dependencies
 deps:
@@ -62,12 +99,79 @@ install: build
 	rebar3 compile
 	rebar3 install
 
+# Docker targets
+docker-build:
+	@echo "Building Docker images..."
+	docker build --target erlang-build -t libsignal-protocol-nif:erlang .
+	docker build --target elixir-build -t libsignal-protocol-nif:elixir .
+	docker build --target gleam-build -t libsignal-protocol-nif:gleam .
+	docker build --target production -t libsignal-protocol-nif:latest .
+
+docker-test:
+	@echo "Running tests in Docker..."
+	docker-compose up --abort-on-container-exit erlang-test
+	docker-compose up --abort-on-container-exit elixir-test
+	docker-compose up --abort-on-container-exit gleam-test
+
+docker-perf:
+	@echo "Running performance tests in Docker..."
+	docker-compose up --abort-on-container-exit perf-test
+
+# Release automation
+release:
+	@echo "Creating release..."
+	./scripts/release.sh
+
+release-patch:
+	@echo "Creating patch release..."
+	./scripts/release.sh patch
+
+release-minor:
+	@echo "Creating minor release..."
+	./scripts/release.sh minor
+
+release-major:
+	@echo "Creating major release..."
+	./scripts/release.sh major
+
+# Development targets
+dev-setup: deps build test-dirs
+	@echo "Development environment setup complete"
+
+dev-test: test perf-test
+	@echo "All tests completed"
+
+# Monitoring targets
+monitor-memory:
+	@echo "Monitoring memory usage..."
+	erl -noshell -pa ebin -eval "performance_test:benchmark_memory_usage(1000), halt()."
+
+monitor-cache:
+	@echo "Monitoring cache performance..."
+	erl -noshell -pa ebin -eval "performance_test:benchmark_cache_performance(1000), halt()."
+
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  build        - Build all components"
-	@echo "  clean        - Clean all build artifacts"
-	@echo "  test         - Run all tests"
-	@echo "  deps         - Install dependencies"
-	@echo "  install      - Build and install"
-	@echo "  help         - Show this help message" 
+	@echo "  build          - Build all components"
+	@echo "  clean          - Clean all build artifacts"
+	@echo "  test-clean     - Clean all test artifacts"
+	@echo "  test           - Run all tests"
+	@echo "  test-cover     - Run tests with coverage"
+	@echo "  perf-test      - Run performance benchmarks"
+	@echo "  perf-monitor   - Run performance monitoring"
+	@echo "  docs           - Generate documentation"
+	@echo "  deps           - Install dependencies"
+	@echo "  install        - Build and install"
+	@echo "  docker-build   - Build Docker images"
+	@echo "  docker-test    - Run tests in Docker"
+	@echo "  docker-perf    - Run performance tests in Docker"
+	@echo "  release        - Create a new release"
+	@echo "  release-patch  - Create a patch release"
+	@echo "  release-minor  - Create a minor release"
+	@echo "  release-major  - Create a major release"
+	@echo "  dev-setup      - Setup development environment"
+	@echo "  dev-test       - Run all development tests"
+	@echo "  monitor-memory - Monitor memory usage"
+	@echo "  monitor-cache  - Monitor cache performance"
+	@echo "  help           - Show this help message" 

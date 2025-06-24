@@ -17,11 +17,13 @@ add_library(crypto STATIC
 target_include_directories(crypto PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${OPENSSL_INCLUDE_DIR}
+    ${ERLANG_INCLUDE_DIRS}
 )
 
 # Link libraries
 target_link_libraries(crypto
     ${OPENSSL_LIBRARIES}
+    ${ERLANG_LIBRARIES}
 )
 
 # Set compiler flags
