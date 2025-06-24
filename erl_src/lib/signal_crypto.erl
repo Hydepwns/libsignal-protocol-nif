@@ -1,4 +1,4 @@
--module(crypto).
+-module(signal_crypto).
 
 -export([generate_key_pair/0, sign/2, verify/3, encrypt/3, decrypt/3, hmac/2, hash/1,
          random_bytes/1]).
@@ -55,7 +55,21 @@ encrypt(Key, IV, Data) ->
         % Use AES-256-GCM for authenticated encryption
         {Ciphertext, Tag} =
             crypto:crypto_one_time_aead(aes_256_gcm, Key, IV, Data, <<>>, 16, true),
-        {ok, <<Ciphertext/binary, Tag/binary>>}
+        Result = <<Ciphertext/binary, Tag/binary>>,
+        io:format("signal_crypto:encrypt: Key=~p (~p bytes), IV=~p (~p bytes), Data=~p (~p bytes), Ciphertext=~p (~p bytes), Tag=~p (~p bytes), Result=~p (~p bytes)~n",
+                  [Key,
+                   byte_size(Key),
+                   IV,
+                   byte_size(IV),
+                   Data,
+                   byte_size(Data),
+                   Ciphertext,
+                   byte_size(Ciphertext),
+                   Tag,
+                   byte_size(Tag),
+                   Result,
+                   byte_size(Result)]),
+        {ok, Result}
     catch
         _:Reason ->
             {error, Reason}
@@ -65,6 +79,9 @@ encrypt(Key, IV, Data) ->
 %% Uses Erlang's built-in crypto module since NIF doesn't have decrypt_message/3
 decrypt(Key, IV, Ciphertext) ->
     try
+        io:format("signal_crypto:decrypt: Key=~p (~p bytes), IV=~p (~p bytes), Ciphertext=~p (~p bytes)~n",
+                  [Key, byte_size(Key), IV, byte_size(IV), Ciphertext, byte_size(Ciphertext)]),
+
         % Extract ciphertext and tag (last 16 bytes are the tag)
         CiphertextLen = byte_size(Ciphertext),
         if CiphertextLen < 16 ->
@@ -73,9 +90,14 @@ decrypt(Key, IV, Ciphertext) ->
                TagLen = 16,
                DataLen = CiphertextLen - TagLen,
                <<Data:DataLen/binary, Tag:TagLen/binary>> = Ciphertext,
+               io:format("signal_crypto:decrypt: extracted Data=~p (~p bytes), Tag=~p (~p bytes)~n",
+                         [Data, byte_size(Data), Tag, byte_size(Tag)]),
 
                % Decrypt AES-256-GCM ciphertext
-               Plaintext = crypto:crypto_one_time_aead(aes_256_gcm, Key, IV, Data, <<>>, Tag, true),
+               Plaintext =
+                   crypto:crypto_one_time_aead(aes_256_gcm, Key, IV, Data, <<>>, Tag, false),
+               io:format("signal_crypto:decrypt: Plaintext=~p (~p bytes)~n",
+                         [Plaintext, byte_size(Plaintext)]),
                {ok, Plaintext}
         end
     catch
