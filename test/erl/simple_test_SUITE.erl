@@ -33,7 +33,7 @@ test_nif_loading(_Config) ->
         ok ->
             io:format("NIF loaded successfully~n"),
             % Try to call a simple wrapper function
-            case signal_crypto:generate_key_pair() of
+            case crypto:generate_key_pair() of
                 {ok, {PublicKey, PrivateKey}} ->
                     io:format("Wrapper function call successful~n"),
                     io:format("PublicKey type: ~p, value: ~p~n",
