@@ -2,25 +2,13 @@
 
 Cross-platform BEAM wrappers (Erlang/Elixir/Gleam) for the Signal Protocol library, implemented with OpenSSL cryptographic primitives.
 
-## About The Project
-
-A modern, cross-platform BEAM (Erlang/Elixir/Gleam) implementation of the Signal Protocol, providing secure end-to-end encryption capabilities using OpenSSL.
-
-- **Erlang NIF API**: Low-level, direct access to Signal Protocol from Erlang
-- **Elixir wrapper**: Ergonomic, idiomatic Elixir API for secure messaging
-- **Gleam wrapper**: Type-safe, functional API for Gleam projects
-
 ## Features
 
 - End-to-end encryption using Signal Protocol
-- Session management
-- Pre-key bundle handling
-- Message encryption/decryption
-- Key exchange
-- Perfect forward secrecy
+- Session management and pre-key bundle handling
+- Message encryption/decryption with perfect forward secrecy
 - Cross-platform support (Linux, macOS, Windows)
 - OpenSSL-based cryptographic primitives
-- C implementation with NIF interface
 
 ## Project Structure
 
