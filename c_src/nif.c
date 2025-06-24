@@ -11,7 +11,10 @@
 #include <openssl/engine.h>
 #include <openssl/conf.h>
 #include <openssl/crypto.h>
+#include <openssl/opensslv.h>
+#include <stdio.h>
 #include "crypto/crypto.h"
+#include "protocol/protocol.h"
 
 // Constants
 #define MESSAGE_KEY_LEN 32
@@ -107,24 +110,8 @@ static int init_openssl(void)
         return 0;
     }
 
-    // Seed the random number generator with high-quality entropy
-    if (!RAND_status())
-    {
-        // Try to seed with system entropy
-        if (!RAND_poll())
-        {
-            return 0;
-        }
-        // Check if we have enough entropy
-        if (!RAND_status())
-        {
-            return 0;
-        }
-    }
-
-    // Initialize error handling
-    ERR_load_crypto_strings();
-    OpenSSL_add_all_algorithms();
+    // Note: ERR_load_crypto_strings() and OpenSSL_add_all_algorithms()
+    // are deprecated in OpenSSL 3.x and not needed with OPENSSL_init_crypto()
 
     return 1;
 }
@@ -132,8 +119,9 @@ static int init_openssl(void)
 // OpenSSL cleanup function
 static void cleanup_openssl(void)
 {
-    EVP_cleanup();
-    ERR_free_strings();
+    // Note: EVP_cleanup() and ERR_free_strings() are deprecated in OpenSSL 3.x
+    // and not needed with OPENSSL_init_crypto()
+    // OpenSSL 3.x handles cleanup automatically
 }
 
 // Enhanced error handling function
@@ -141,17 +129,15 @@ static ERL_NIF_TERM make_openssl_error(ErlNifEnv *env)
 {
     unsigned long err;
     char err_buf[256];
-    const char *file;
-    const char *data;
-    int line;
-    int flags;
 
-    err = ERR_get_error_all(&file, &line, NULL, &data, &flags);
+    err = ERR_get_error();
     if (err)
     {
         ERR_error_string_n(err, err_buf, sizeof(err_buf));
+        fprintf(stderr, "[NIF DEBUG] OpenSSL error: %s\n", err_buf);
         return make_error(env, err_buf);
     }
+    fprintf(stderr, "[NIF DEBUG] OpenSSL error: Unknown error\n");
     return make_error(env, "Unknown OpenSSL error");
 }
 
@@ -169,17 +155,17 @@ static int check_openssl_error(ErlNifEnv* env) {
 */
 
 // Key validation constants
-#define MIN_KEY_SIZE 32                // Minimum key size in bytes
-#define MAX_KEY_SIZE 65                // Maximum key size in bytes (uncompressed EC point)
-#define CURVE_NID NID_X9_62_prime256v1 // P-256 curve
+#define MIN_KEY_SIZE 32      // Minimum key size in bytes (Curve25519)
+#define MAX_KEY_SIZE 32      // Maximum key size in bytes (Curve25519)
+#define CURVE_NID NID_X25519 // Curve25519 curve
 
 // Scrypt parameters
 #define SCRYPT_N 32768
 #define SCRYPT_R 8
 #define SCRYPT_P 1
 
-// Header size: 8 bytes for indices, 65 for uncompressed EC point
-#define HEADER_SIZE (8 + 65)
+// Header size: 8 bytes for indices, 32 for Curve25519 public key
+#define HEADER_SIZE (8 + 32)
 
 // Key validation functions
 static int validate_ec_key(EVP_PKEY *key)
@@ -204,8 +190,8 @@ static int validate_ec_key(EVP_PKEY *key)
         return 0;
     }
 
-    // Verify key type is EC
-    if (EVP_PKEY_id(key) != EVP_PKEY_EC)
+    // Verify key type is Curve25519 (X25519)
+    if (EVP_PKEY_id(key) != EVP_PKEY_X25519)
     {
         return 0;
     }
@@ -215,17 +201,13 @@ static int validate_ec_key(EVP_PKEY *key)
 
 static int validate_public_key_data(const unsigned char *key_data, size_t key_len)
 {
-    if (!key_data || key_len != MAX_KEY_SIZE)
+    if (!key_data || key_len != CURVE25519_KEY_SIZE)
     {
         return 0;
     }
 
-    // Verify key format (first byte should be 0x04 for uncompressed point)
-    if (key_data[0] != 0x04)
-    {
-        return 0;
-    }
-
+    // For Curve25519, we just check the size since it's a raw public key
+    // No specific format validation needed like P-256's 0x04 prefix
     return 1;
 }
 
@@ -246,7 +228,7 @@ static ErlNifFunc nif_funcs[] = {
     {"generate_identity_key_pair", 0, generate_identity_key_pair, 0},
     {"generate_pre_key", 1, generate_pre_key, 0},
     {"generate_signed_pre_key", 2, generate_signed_pre_key, 0},
-    {"create_session", 2, create_session, 0},
+    {"create_session", 1, create_session, 0},
     {"process_pre_key_bundle", 2, process_pre_key_bundle, 0},
     {"encrypt_message", 2, encrypt_message, 0},
     {"decrypt_message", 2, decrypt_message, 0},
@@ -260,10 +242,14 @@ static int on_load(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
     (void)env;
     (void)priv_data;
     (void)load_info;
+    fprintf(stderr, "[NIF DEBUG] on_load called\n");
+    fprintf(stderr, "[NIF DEBUG] OpenSSL version: %s\n", OpenSSL_version(OPENSSL_VERSION));
     if (!init_openssl())
     {
+        fprintf(stderr, "[NIF DEBUG] on_load: init_openssl failed\n");
         return -1;
     }
+    fprintf(stderr, "[NIF DEBUG] on_load: success\n");
     return 0;
 }
 
@@ -305,64 +291,79 @@ static ERL_NIF_TERM make_binary(ErlNifEnv *env, const unsigned char *data, size_
 static int generate_ec_key_pair(EVP_PKEY **key)
 {
     EVP_PKEY *public_key = NULL, *private_key = NULL;
-    crypto_error_t result = evp_generate_ec_keypair(&public_key, &private_key);
+    fprintf(stderr, "[NIF DEBUG] generate_ec_key_pair: calling curve25519_generate_keypair\n");
+
+    // Use Curve25519 instead of P-256
+    curve25519_key_t pub_key, priv_key;
+    crypto_error_t result = curve25519_generate_keypair(&pub_key, &priv_key);
+    fprintf(stderr, "[NIF DEBUG] generate_ec_key_pair: curve25519_generate_keypair result = %d\n", result);
     if (result != CRYPTO_OK)
     {
+        fprintf(stderr, "[NIF DEBUG] generate_ec_key_pair: key generation failed\n");
         return 0;
     }
 
-    // For our use case, we need the private key (which contains both public and private)
-    EVP_PKEY_free(public_key);
-    *key = private_key;
+    // Create EVP_PKEY from Curve25519 private key
+    EVP_PKEY *pkey = EVP_PKEY_new_raw_private_key(EVP_PKEY_X25519, NULL, priv_key.key, CURVE25519_KEY_SIZE);
+    if (!pkey)
+    {
+        fprintf(stderr, "[NIF DEBUG] generate_ec_key_pair: failed to create EVP_PKEY\n");
+        return 0;
+    }
+
+    *key = pkey;
+    fprintf(stderr, "[NIF DEBUG] generate_ec_key_pair: key generation succeeded\n");
     return 1;
 }
 
 static ERL_NIF_TERM key_to_binary(ErlNifEnv *env, EVP_PKEY *key, int is_public)
 {
-    size_t len;
-    unsigned char *buffer;
-    ERL_NIF_TERM binary;
-
     if (is_public)
     {
-        // Get public key size
-        if (EVP_PKEY_get_raw_public_key(key, NULL, &len) <= 0)
+        // For Curve25519 public key, extract raw public key
+        uint8_t buffer[CURVE25519_KEY_SIZE];
+        size_t buffer_len = sizeof(buffer);
+        fprintf(stderr, "[NIF DEBUG] key_to_binary: serializing Curve25519 public key\n");
+
+        if (EVP_PKEY_get_raw_public_key(key, buffer, &buffer_len) <= 0 || buffer_len != CURVE25519_KEY_SIZE)
         {
-            return make_openssl_error(env);
+            fprintf(stderr, "[NIF DEBUG] key_to_binary: failed to get raw public key\n");
+            return make_error(env, "Failed to serialize public key");
         }
 
-        buffer = enif_make_new_binary(env, len, &binary);
-        if (!buffer)
+        ERL_NIF_TERM binary;
+        unsigned char *bin_buffer = enif_make_new_binary(env, buffer_len, &binary);
+        if (!bin_buffer)
         {
+            fprintf(stderr, "[NIF DEBUG] key_to_binary: failed to allocate binary for public key\n");
             return make_error(env, "Failed to allocate binary");
         }
-
-        if (EVP_PKEY_get_raw_public_key(key, buffer, &len) <= 0)
-        {
-            return make_openssl_error(env);
-        }
+        memcpy(bin_buffer, buffer, buffer_len);
+        return binary;
     }
     else
     {
-        // Get private key size
-        if (EVP_PKEY_get_raw_private_key(key, NULL, &len) <= 0)
+        // For Curve25519 private key, extract raw private key
+        uint8_t buffer[CURVE25519_KEY_SIZE];
+        size_t buffer_len = sizeof(buffer);
+        fprintf(stderr, "[NIF DEBUG] key_to_binary: serializing Curve25519 private key\n");
+
+        if (EVP_PKEY_get_raw_private_key(key, buffer, &buffer_len) <= 0 || buffer_len != CURVE25519_KEY_SIZE)
         {
-            return make_openssl_error(env);
+            fprintf(stderr, "[NIF DEBUG] key_to_binary: failed to get raw private key\n");
+            return make_error(env, "Failed to serialize private key");
         }
 
-        buffer = enif_make_new_binary(env, len, &binary);
-        if (!buffer)
+        ERL_NIF_TERM binary;
+        unsigned char *bin_buffer = enif_make_new_binary(env, buffer_len, &binary);
+        if (!bin_buffer)
         {
+            fprintf(stderr, "[NIF DEBUG] key_to_binary: failed to allocate binary for private key\n");
             return make_error(env, "Failed to allocate binary");
         }
-
-        if (EVP_PKEY_get_raw_private_key(key, buffer, &len) <= 0)
-        {
-            return make_openssl_error(env);
-        }
+        memcpy(bin_buffer, buffer, buffer_len);
+        return binary;
     }
-
-    return binary;
 }
 
 // Cryptographic functions
@@ -441,24 +442,96 @@ static int derive_root_key(const unsigned char *dh_output, size_t dh_output_len,
                            const unsigned char *salt, size_t salt_len,
                            unsigned char *root_key)
 {
-    return EVP_PBE_scrypt((const char *)dh_output, dh_output_len, salt, salt_len,
-                          SCRYPT_N, SCRYPT_R, SCRYPT_P, 0, root_key, ROOT_KEY_LEN) == 1;
+    // Use simple HMAC-SHA256 for key derivation
+    const unsigned char info[] = "RootKey";
+    size_t info_len = sizeof(info) - 1; // Exclude null terminator
+
+    // Use salt as HMAC key, or default to zeros if no salt
+    unsigned char hmac_key[32] = {0};
+    if (salt && salt_len > 0)
+    {
+        size_t copy_len = (salt_len > 32) ? 32 : salt_len;
+        memcpy(hmac_key, salt, copy_len);
+    }
+
+    // HMAC(dh_output, info)
+    unsigned char hmac_result[32];
+    unsigned int hmac_len = sizeof(hmac_result);
+
+    if (!HMAC(EVP_sha256(), hmac_key, sizeof(hmac_key),
+              dh_output, dh_output_len,
+              hmac_result, &hmac_len))
+    {
+        return 0;
+    }
+
+    // Use the HMAC result as the root key
+    memcpy(root_key, hmac_result, ROOT_KEY_LEN);
+    return 1;
 }
 
 static int derive_chain_key(const unsigned char *root_key, size_t root_key_len,
                             const unsigned char *salt, size_t salt_len,
                             unsigned char *chain_key)
 {
-    return EVP_PBE_scrypt((const char *)root_key, root_key_len, salt, salt_len,
-                          SCRYPT_N, SCRYPT_R, SCRYPT_P, 0, chain_key, CHAIN_KEY_LEN) == 1;
+    // Use simple HMAC-SHA256 for key derivation
+    const unsigned char info[] = "ChainKey";
+    size_t info_len = sizeof(info) - 1; // Exclude null terminator
+
+    // Use salt as HMAC key, or default to zeros if no salt
+    unsigned char hmac_key[32] = {0};
+    if (salt && salt_len > 0)
+    {
+        size_t copy_len = (salt_len > 32) ? 32 : salt_len;
+        memcpy(hmac_key, salt, copy_len);
+    }
+
+    // HMAC(root_key, info)
+    unsigned char hmac_result[32];
+    unsigned int hmac_len = sizeof(hmac_result);
+
+    if (!HMAC(EVP_sha256(), hmac_key, sizeof(hmac_key),
+              root_key, root_key_len,
+              hmac_result, &hmac_len))
+    {
+        return 0;
+    }
+
+    // Use the HMAC result as the chain key
+    memcpy(chain_key, hmac_result, CHAIN_KEY_LEN);
+    return 1;
 }
 
 static int derive_message_key(const unsigned char *chain_key, size_t chain_key_len,
                               const unsigned char *salt, size_t salt_len,
                               unsigned char *message_key)
 {
-    return EVP_PBE_scrypt((const char *)chain_key, chain_key_len, salt, salt_len,
-                          SCRYPT_N, SCRYPT_R, SCRYPT_P, 0, message_key, MESSAGE_KEY_LEN) == 1;
+    // Use simple HMAC-SHA256 for key derivation
+    const unsigned char info[] = "MessageKey";
+    size_t info_len = sizeof(info) - 1; // Exclude null terminator
+
+    // Use salt as HMAC key, or default to zeros if no salt
+    unsigned char hmac_key[32] = {0};
+    if (salt && salt_len > 0)
+    {
+        size_t copy_len = (salt_len > 32) ? 32 : salt_len;
+        memcpy(hmac_key, salt, copy_len);
+    }
+
+    // HMAC(chain_key, info)
+    unsigned char hmac_result[32];
+    unsigned int hmac_len = sizeof(hmac_result);
+
+    if (!HMAC(EVP_sha256(), hmac_key, sizeof(hmac_key),
+              chain_key, chain_key_len,
+              hmac_result, &hmac_len))
+    {
+        return 0;
+    }
+
+    // Use the HMAC result as the message key
+    memcpy(message_key, hmac_result, MESSAGE_KEY_LEN);
+    return 1;
 }
 
 static int calculate_dh_shared_secret(EVP_PKEY *our_key, EVP_PKEY *their_key,
@@ -529,11 +602,9 @@ static int parse_binary(const unsigned char *data, size_t data_len, size_t *offs
 
 // Ratchet constants
 #define MAX_SKIP 1000
-#define MAX_MESSAGE_KEYS 2000
 
 // Message key skipping constants
 #define MAX_SKIP_DISTANCE 1000
-#define MAX_SKIP_KEYS 100
 
 // Message key cleanup constants
 #define MESSAGE_KEY_CLEANUP_THRESHOLD 1000
@@ -1084,15 +1155,25 @@ static ERL_NIF_TERM generate_identity_key_pair(ErlNifEnv *env, int argc, const E
     EVP_PKEY *key;
     ERL_NIF_TERM public_key, private_key;
 
+    fprintf(stderr, "[NIF DEBUG] generate_identity_key_pair: starting key generation\n");
+
     if (!generate_ec_key_pair(&key))
     {
+        fprintf(stderr, "[NIF DEBUG] generate_identity_key_pair: key generation failed\n");
         return make_error(env, "Failed to generate key pair");
     }
 
+    fprintf(stderr, "[NIF DEBUG] generate_identity_key_pair: key generation succeeded\n");
+
+    fprintf(stderr, "[NIF DEBUG] generate_identity_key_pair: converting public key to binary\n");
     public_key = key_to_binary(env, key, 1);
+
+    fprintf(stderr, "[NIF DEBUG] generate_identity_key_pair: converting private key to binary\n");
     private_key = key_to_binary(env, key, 0);
 
     EVP_PKEY_free(key);
+
+    fprintf(stderr, "[NIF DEBUG] generate_identity_key_pair: returning result\n");
     return make_ok(env, enif_make_tuple2(env, public_key, private_key));
 }
 
@@ -1150,14 +1231,12 @@ static ERL_NIF_TERM generate_signed_pre_key(ErlNifEnv *env, int argc, const ERL_
 static ERL_NIF_TERM create_session(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     (void)argc;
-    (void)argv;
-    ErlNifBinary local_identity_key, remote_identity_key;
+    ErlNifBinary identity_key;
     ERL_NIF_TERM session_id;
 
-    if (!enif_inspect_binary(env, argv[0], &local_identity_key) ||
-        !enif_inspect_binary(env, argv[1], &remote_identity_key))
+    if (!enif_inspect_binary(env, argv[0], &identity_key))
     {
-        return make_error(env, "Invalid identity keys");
+        return make_error(env, "Invalid identity key");
     }
 
     // Generate a unique session ID
@@ -1242,16 +1321,25 @@ static ERL_NIF_TERM process_pre_key_bundle(ErlNifEnv *env, int argc, const ERL_N
 
     // Create EVP_PKEY from pre-key
     EVP_PKEY *pre_key_ec = NULL;
-    crypto_error_t result = evp_deserialize_public_key(pre_key, pre_key_len, &pre_key_ec);
-    if (result != CRYPTO_OK)
+    if (pre_key_len != CURVE25519_KEY_SIZE)
+    {
+        return make_error(env, "Invalid pre-key size");
+    }
+    pre_key_ec = EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, NULL, pre_key, pre_key_len);
+    if (!pre_key_ec)
     {
         return make_error(env, "Failed to create pre-key EVP_PKEY");
     }
 
     // Create EVP_PKEY from signed pre-key
     EVP_PKEY *signed_pre_key_ec = NULL;
-    result = evp_deserialize_public_key(signed_pre_key, signed_pre_key_len, &signed_pre_key_ec);
-    if (result != CRYPTO_OK)
+    if (signed_pre_key_len != CURVE25519_KEY_SIZE)
+    {
+        EVP_PKEY_free(pre_key_ec);
+        return make_error(env, "Invalid signed pre-key size");
+    }
+    signed_pre_key_ec = EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, NULL, signed_pre_key, signed_pre_key_len);
+    if (!signed_pre_key_ec)
     {
         EVP_PKEY_free(pre_key_ec);
         return make_error(env, "Failed to create signed pre-key EVP_PKEY");
@@ -1259,8 +1347,14 @@ static ERL_NIF_TERM process_pre_key_bundle(ErlNifEnv *env, int argc, const ERL_N
 
     // Create EVP_PKEY from identity key
     EVP_PKEY *identity_key_ec = NULL;
-    result = evp_deserialize_public_key(identity_key, identity_key_len, &identity_key_ec);
-    if (result != CRYPTO_OK)
+    if (identity_key_len != CURVE25519_KEY_SIZE)
+    {
+        EVP_PKEY_free(signed_pre_key_ec);
+        EVP_PKEY_free(pre_key_ec);
+        return make_error(env, "Invalid identity key size");
+    }
+    identity_key_ec = EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, NULL, identity_key, identity_key_len);
+    if (!identity_key_ec)
     {
         EVP_PKEY_free(signed_pre_key_ec);
         EVP_PKEY_free(pre_key_ec);
@@ -1485,15 +1579,11 @@ static ERL_NIF_TERM encrypt_message(ErlNifEnv *env, int argc, const ERL_NIF_TERM
     header_data[7] = chain_index & 0xFF;
 
     // Write DH public key to header
-    uint8_t pub_key_buffer[EC_PUBLIC_KEY_SIZE];
+    uint8_t pub_key_buffer[CURVE25519_KEY_SIZE];
     size_t pub_key_len = sizeof(pub_key_buffer);
-    if (evp_serialize_public_key(state.sending_chain.dh_key, pub_key_buffer, &pub_key_len) != CRYPTO_OK)
+    if (EVP_PKEY_get_raw_public_key(state.sending_chain.dh_key, pub_key_buffer, &pub_key_len) <= 0 || pub_key_len != CURVE25519_KEY_SIZE)
     {
         return make_error(env, "Failed to serialize public key");
-    }
-    if (pub_key_len != 65)
-    {
-        return make_error(env, "Invalid public key size");
     }
     memcpy(header_data + 8, pub_key_buffer, pub_key_len);
 
@@ -1560,17 +1650,11 @@ static ERL_NIF_TERM decrypt_message(ErlNifEnv *env, int argc, const ERL_NIF_TERM
         return make_error(env, "Invalid header size");
     }
 
-    // Extract and validate DH public key from header
-    if (!validate_public_key_data(header.data + offset, 65))
+    // Create and validate DH key from header
+    EVP_PKEY *their_dh_key = EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, NULL, header.data + offset, 32);
+    if (!their_dh_key)
     {
-        return make_error(env, "Invalid public key format");
-    }
-
-    // Create and validate DH key
-    EVP_PKEY *their_dh_key = NULL;
-    if (!generate_ec_key_pair(&their_dh_key))
-    {
-        return make_error(env, "Failed to generate DH key");
+        return make_error(env, "Failed to create DH key from header");
     }
 
     // Handle out-of-order messages

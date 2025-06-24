@@ -1,16 +1,17 @@
-#include "signal_protocol.h"
+#include "protocol.h"
 #include <stdlib.h>
 #include <string.h>
 #include <openssl/hmac.h>
+#include "../crypto/crypto.h"
 
 // Helper functions for key derivation
-static signal_error_t derive_chain_key(uint8_t *chain_key, size_t chain_key_len,
-                                       const uint8_t *input_key, size_t input_key_len,
-                                       const char *label)
+static protocol_error_t derive_chain_key(uint8_t *chain_key, size_t chain_key_len,
+                                         const uint8_t *input_key, size_t input_key_len,
+                                         const char *label)
 {
     if (!chain_key || !input_key || !label)
     {
-        return SIGNAL_ERROR_INVALID_PARAMETER;
+        return PROTOCOL_ERROR_INVALID_PARAMETER;
     }
 
     // Use HKDF to derive the chain key
@@ -18,7 +19,7 @@ static signal_error_t derive_chain_key(uint8_t *chain_key, size_t chain_key_len,
     size_t info_len = strlen(label);
     if (info_len > sizeof(info))
     {
-        return SIGNAL_ERROR_INVALID_PARAMETER;
+        return PROTOCOL_ERROR_INVALID_PARAMETER;
     }
     memcpy(info, label, info_len);
 
@@ -27,14 +28,14 @@ static signal_error_t derive_chain_key(uint8_t *chain_key, size_t chain_key_len,
               input_key, input_key_len,
               chain_key, (unsigned int *)&chain_key_len))
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
-    return SIGNAL_OK;
+    return PROTOCOL_OK;
 }
 
-static signal_error_t derive_message_key(uint8_t *message_key, size_t message_key_len,
-                                         const uint8_t *chain_key, size_t chain_key_len)
+static protocol_error_t derive_message_key(uint8_t *message_key, size_t message_key_len,
+                                           const uint8_t *chain_key, size_t chain_key_len)
 {
     return derive_chain_key(message_key, message_key_len,
                             chain_key, chain_key_len,
@@ -42,23 +43,23 @@ static signal_error_t derive_message_key(uint8_t *message_key, size_t message_ke
 }
 
 // Protocol store management
-signal_error_t signal_protocol_store_create(signal_protocol_store_t **store)
+protocol_error_t protocol_protocol_store_create(protocol_protocol_store_t **store)
 {
     if (!store)
     {
-        return SIGNAL_ERROR_INVALID_PARAMETER;
+        return PROTOCOL_ERROR_INVALID_PARAMETER;
     }
 
-    *store = calloc(1, sizeof(signal_protocol_store_t));
+    *store = calloc(1, sizeof(protocol_protocol_store_t));
     if (!*store)
     {
-        return SIGNAL_ERROR_MEMORY;
+        return PROTOCOL_ERROR_MEMORY;
     }
 
-    return SIGNAL_OK;
+    return PROTOCOL_OK;
 }
 
-void signal_protocol_store_destroy(signal_protocol_store_t *store)
+void protocol_protocol_store_destroy(protocol_protocol_store_t *store)
 {
     if (store)
     {
@@ -75,66 +76,66 @@ void signal_protocol_store_destroy(signal_protocol_store_t *store)
 }
 
 // Session management
-signal_error_t signal_session_create(signal_session_state_t **session,
-                                     const signal_protocol_store_t *store,
-                                     const signal_identity_key_t *local_identity_key,
-                                     const signal_identity_key_t *remote_identity_key)
+protocol_error_t protocol_session_create(protocol_session_state_t **session,
+                                         const protocol_protocol_store_t *store,
+                                         const protocol_identity_key_t *local_identity_key,
+                                         const protocol_identity_key_t *remote_identity_key)
 {
     if (!session || !store || !local_identity_key || !remote_identity_key)
     {
-        return SIGNAL_ERROR_INVALID_PARAMETER;
+        return PROTOCOL_ERROR_INVALID_PARAMETER;
     }
 
-    *session = calloc(1, sizeof(signal_session_state_t));
+    *session = calloc(1, sizeof(protocol_session_state_t));
     if (!*session)
     {
-        return SIGNAL_ERROR_MEMORY;
+        return PROTOCOL_ERROR_MEMORY;
     }
 
-    (*session)->session_version = SIGNAL_PROTOCOL_VERSION;
+    (*session)->session_version = PROTOCOL_VERSION;
     (*session)->local_registration_id = store->registration_id;
-    memcpy(&(*session)->local_identity_key, local_identity_key, sizeof(signal_identity_key_t));
-    memcpy(&(*session)->remote_identity_key, remote_identity_key, sizeof(signal_identity_key_t));
+    memcpy(&(*session)->local_identity_key, local_identity_key, sizeof(protocol_identity_key_t));
+    memcpy(&(*session)->remote_identity_key, remote_identity_key, sizeof(protocol_identity_key_t));
 
     // Initialize chain keys with random values
-    if (crypto_random_bytes((*session)->sender_chain_key, SIGNAL_SESSION_KEY_SIZE) != CRYPTO_OK ||
-        crypto_random_bytes((*session)->receiver_chain_key, SIGNAL_SESSION_KEY_SIZE) != CRYPTO_OK ||
-        crypto_random_bytes((*session)->root_key, SIGNAL_SESSION_KEY_SIZE) != CRYPTO_OK)
+    if (crypto_random_bytes((*session)->sender_chain_key, PROTOCOL_SESSION_KEY_SIZE) != CRYPTO_OK ||
+        crypto_random_bytes((*session)->receiver_chain_key, PROTOCOL_SESSION_KEY_SIZE) != CRYPTO_OK ||
+        crypto_random_bytes((*session)->root_key, PROTOCOL_SESSION_KEY_SIZE) != CRYPTO_OK)
     {
         free(*session);
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
-    return SIGNAL_OK;
+    return PROTOCOL_OK;
 }
 
-void signal_session_destroy(signal_session_state_t *session)
+void protocol_session_destroy(protocol_session_state_t *session)
 {
     if (session)
     {
-        crypto_secure_zero(session, sizeof(signal_session_state_t));
+        crypto_secure_zero(session, sizeof(protocol_session_state_t));
         free(session);
     }
 }
 
 // Message processing
-signal_error_t signal_process_pre_key_bundle(signal_session_state_t *session,
-                                             const signal_pre_key_bundle_t *bundle)
+protocol_error_t protocol_process_pre_key_bundle(protocol_session_state_t *session,
+                                                 const protocol_pre_key_bundle_t *bundle)
 {
     if (!session || !bundle)
     {
-        return SIGNAL_ERROR_INVALID_PARAMETER;
+        return PROTOCOL_ERROR_INVALID_PARAMETER;
     }
 
-    if (bundle->version != SIGNAL_PROTOCOL_VERSION)
+    if (bundle->version != PROTOCOL_VERSION)
     {
-        return SIGNAL_ERROR_INVALID_VERSION;
+        return PROTOCOL_ERROR_INVALID_VERSION;
     }
 
     // Verify the identity key
-    if (signal_verify_identity_key(&bundle->identity_key) != SIGNAL_OK)
+    if (protocol_verify_identity_key(&bundle->identity_key) != PROTOCOL_OK)
     {
-        return SIGNAL_ERROR_INVALID_KEY;
+        return PROTOCOL_ERROR_INVALID_KEY;
     }
 
     // Store the remote registration ID
@@ -149,7 +150,7 @@ signal_error_t signal_process_pre_key_bundle(signal_session_state_t *session,
                                  &bundle->base_key.key,
                                  shared_secret, &shared_secret_len) != CRYPTO_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
     // 2. DH(ephemeral_key, identity_key)
@@ -159,7 +160,7 @@ signal_error_t signal_process_pre_key_bundle(signal_session_state_t *session,
                                  &bundle->identity_key.key,
                                  shared_secret2, &shared_secret2_len) != CRYPTO_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
     // 3. DH(ephemeral_key, base_key)
@@ -169,7 +170,7 @@ signal_error_t signal_process_pre_key_bundle(signal_session_state_t *session,
                                  &bundle->base_key.key,
                                  shared_secret3, &shared_secret3_len) != CRYPTO_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
     // Combine the shared secrets
@@ -179,65 +180,65 @@ signal_error_t signal_process_pre_key_bundle(signal_session_state_t *session,
     memcpy(combined_secret + 64, shared_secret3, 32);
 
     // Derive the root key and chain keys
-    if (derive_chain_key(session->root_key, SIGNAL_SESSION_KEY_SIZE,
+    if (derive_chain_key(session->root_key, PROTOCOL_SESSION_KEY_SIZE,
                          combined_secret, sizeof(combined_secret),
-                         "RootKey") != SIGNAL_OK)
+                         "RootKey") != PROTOCOL_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
-    if (derive_chain_key(session->sender_chain_key, SIGNAL_SESSION_KEY_SIZE,
-                         session->root_key, SIGNAL_SESSION_KEY_SIZE,
-                         "SenderChainKey") != SIGNAL_OK)
+    if (derive_chain_key(session->sender_chain_key, PROTOCOL_SESSION_KEY_SIZE,
+                         session->root_key, PROTOCOL_SESSION_KEY_SIZE,
+                         "SenderChainKey") != PROTOCOL_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
-    if (derive_chain_key(session->receiver_chain_key, SIGNAL_SESSION_KEY_SIZE,
-                         session->root_key, SIGNAL_SESSION_KEY_SIZE,
-                         "ReceiverChainKey") != SIGNAL_OK)
+    if (derive_chain_key(session->receiver_chain_key, PROTOCOL_SESSION_KEY_SIZE,
+                         session->root_key, PROTOCOL_SESSION_KEY_SIZE,
+                         "ReceiverChainKey") != PROTOCOL_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
-    return SIGNAL_OK;
+    return PROTOCOL_OK;
 }
 
-signal_error_t signal_encrypt_message(signal_session_state_t *session,
-                                      const uint8_t *message, size_t message_len,
-                                      uint8_t *ciphertext, size_t *ciphertext_len)
+protocol_error_t protocol_encrypt_message(protocol_session_state_t *session,
+                                          const uint8_t *message, size_t message_len,
+                                          uint8_t *ciphertext, size_t *ciphertext_len)
 {
     if (!session || !message || !ciphertext || !ciphertext_len)
     {
-        return SIGNAL_ERROR_INVALID_PARAMETER;
+        return PROTOCOL_ERROR_INVALID_PARAMETER;
     }
 
     // Generate a new ephemeral key pair
     curve25519_key_t ephemeral_key;
     if (curve25519_generate_keypair(&ephemeral_key, NULL) != CRYPTO_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
     // Derive the message key
     uint8_t message_key[32];
     if (derive_message_key(message_key, sizeof(message_key),
-                           session->sender_chain_key, SIGNAL_SESSION_KEY_SIZE) != SIGNAL_OK)
+                           session->sender_chain_key, PROTOCOL_SESSION_KEY_SIZE) != PROTOCOL_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
     // Encrypt the message
     uint8_t iv[12];
     if (crypto_random_bytes(iv, sizeof(iv)) != CRYPTO_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
     size_t encrypted_len = message_len + 16; // Message + MAC
     if (*ciphertext_len < encrypted_len)
     {
-        return SIGNAL_ERROR_INVALID_PARAMETER;
+        return PROTOCOL_ERROR_INVALID_PARAMETER;
     }
 
     if (aes_gcm_encrypt((aes_key_t *)message_key, iv, sizeof(iv),
@@ -246,50 +247,50 @@ signal_error_t signal_encrypt_message(signal_session_state_t *session,
                         ciphertext, &encrypted_len,
                         ciphertext + encrypted_len - 16, 16) != CRYPTO_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
     // Update the chain key
-    if (derive_chain_key(session->sender_chain_key, SIGNAL_SESSION_KEY_SIZE,
-                         session->sender_chain_key, SIGNAL_SESSION_KEY_SIZE,
-                         "ChainKey") != SIGNAL_OK)
+    if (derive_chain_key(session->sender_chain_key, PROTOCOL_SESSION_KEY_SIZE,
+                         session->sender_chain_key, PROTOCOL_SESSION_KEY_SIZE,
+                         "ChainKey") != PROTOCOL_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
     session->sender_chain_key_id++;
 
     *ciphertext_len = encrypted_len;
-    return SIGNAL_OK;
+    return PROTOCOL_OK;
 }
 
-signal_error_t signal_decrypt_message(signal_session_state_t *session,
-                                      const uint8_t *ciphertext, size_t ciphertext_len,
-                                      uint8_t *message, size_t *message_len)
+protocol_error_t protocol_decrypt_message(protocol_session_state_t *session,
+                                          const uint8_t *ciphertext, size_t ciphertext_len,
+                                          uint8_t *message, size_t *message_len)
 {
     if (!session || !ciphertext || !message || !message_len)
     {
-        return SIGNAL_ERROR_INVALID_PARAMETER;
+        return PROTOCOL_ERROR_INVALID_PARAMETER;
     }
 
     if (ciphertext_len < 16)
     { // Minimum size for MAC
-        return SIGNAL_ERROR_INVALID_MESSAGE;
+        return PROTOCOL_ERROR_INVALID_MESSAGE;
     }
 
     // Derive the message key
     uint8_t message_key[32];
     if (derive_message_key(message_key, sizeof(message_key),
-                           session->receiver_chain_key, SIGNAL_SESSION_KEY_SIZE) != SIGNAL_OK)
+                           session->receiver_chain_key, PROTOCOL_SESSION_KEY_SIZE) != PROTOCOL_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
     // Decrypt the message
     size_t decrypted_len = ciphertext_len - 16; // Remove MAC
     if (*message_len < decrypted_len)
     {
-        return SIGNAL_ERROR_INVALID_PARAMETER;
+        return PROTOCOL_ERROR_INVALID_PARAMETER;
     }
 
     if (aes_gcm_decrypt((aes_key_t *)message_key, NULL, 0, // No IV in this example
@@ -298,33 +299,33 @@ signal_error_t signal_decrypt_message(signal_session_state_t *session,
                         ciphertext + decrypted_len, 16, // MAC
                         message, message_len) != CRYPTO_OK)
     {
-        return SIGNAL_ERROR_INVALID_MAC;
+        return PROTOCOL_ERROR_INVALID_MAC;
     }
 
     // Update the chain key
-    if (derive_chain_key(session->receiver_chain_key, SIGNAL_SESSION_KEY_SIZE,
-                         session->receiver_chain_key, SIGNAL_SESSION_KEY_SIZE,
-                         "ChainKey") != SIGNAL_OK)
+    if (derive_chain_key(session->receiver_chain_key, PROTOCOL_SESSION_KEY_SIZE,
+                         session->receiver_chain_key, PROTOCOL_SESSION_KEY_SIZE,
+                         "ChainKey") != PROTOCOL_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
     session->receiver_chain_key_id++;
 
-    return SIGNAL_OK;
+    return PROTOCOL_OK;
 }
 
 // Key generation
-signal_error_t signal_generate_identity_key_pair(signal_identity_key_t *identity_key)
+protocol_error_t protocol_generate_identity_key_pair(protocol_identity_key_t *identity_key)
 {
     if (!identity_key)
     {
-        return SIGNAL_ERROR_INVALID_PARAMETER;
+        return PROTOCOL_ERROR_INVALID_PARAMETER;
     }
 
     if (curve25519_generate_keypair(&identity_key->key, NULL) != CRYPTO_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
     // Sign the public key with itself (simplified for this example)
@@ -332,41 +333,41 @@ signal_error_t signal_generate_identity_key_pair(signal_identity_key_t *identity
                     identity_key->key.key, CURVE25519_KEY_SIZE,
                     identity_key->signature, NULL) != CRYPTO_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
-    return SIGNAL_OK;
+    return PROTOCOL_OK;
 }
 
-signal_error_t signal_generate_pre_key(signal_pre_key_t *pre_key, uint32_t key_id)
+protocol_error_t protocol_generate_pre_key(protocol_pre_key_t *pre_key, uint32_t key_id)
 {
     if (!pre_key)
     {
-        return SIGNAL_ERROR_INVALID_PARAMETER;
+        return PROTOCOL_ERROR_INVALID_PARAMETER;
     }
 
     pre_key->key_id = key_id;
     if (curve25519_generate_keypair(&pre_key->key, NULL) != CRYPTO_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
-    return SIGNAL_OK;
+    return PROTOCOL_OK;
 }
 
-signal_error_t signal_generate_signed_pre_key(signal_signed_pre_key_t *signed_pre_key,
-                                              const signal_identity_key_t *identity_key,
-                                              uint32_t key_id)
+protocol_error_t protocol_generate_signed_pre_key(protocol_signed_pre_key_t *signed_pre_key,
+                                                  const protocol_identity_key_t *identity_key,
+                                                  uint32_t key_id)
 {
     if (!signed_pre_key || !identity_key)
     {
-        return SIGNAL_ERROR_INVALID_PARAMETER;
+        return PROTOCOL_ERROR_INVALID_PARAMETER;
     }
 
     signed_pre_key->key_id = key_id;
     if (curve25519_generate_keypair(&signed_pre_key->key, NULL) != CRYPTO_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
     // Sign the pre key with the identity key
@@ -374,18 +375,18 @@ signal_error_t signal_generate_signed_pre_key(signal_signed_pre_key_t *signed_pr
                     signed_pre_key->key.key, CURVE25519_KEY_SIZE,
                     signed_pre_key->signature, NULL) != CRYPTO_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
-    return SIGNAL_OK;
+    return PROTOCOL_OK;
 }
 
 // Key verification
-signal_error_t signal_verify_identity_key(const signal_identity_key_t *identity_key)
+protocol_error_t protocol_verify_identity_key(const protocol_identity_key_t *identity_key)
 {
     if (!identity_key)
     {
-        return SIGNAL_ERROR_INVALID_PARAMETER;
+        return PROTOCOL_ERROR_INVALID_PARAMETER;
     }
 
     // Verify the signature
@@ -394,23 +395,23 @@ signal_error_t signal_verify_identity_key(const signal_identity_key_t *identity_
                     identity_key->key.key, CURVE25519_KEY_SIZE,
                     computed_signature, NULL) != CRYPTO_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
     if (memcmp(computed_signature, identity_key->signature, 64) != 0)
     {
-        return SIGNAL_ERROR_INVALID_SIGNATURE;
+        return PROTOCOL_ERROR_INVALID_SIGNATURE;
     }
 
-    return SIGNAL_OK;
+    return PROTOCOL_OK;
 }
 
-signal_error_t signal_verify_signed_pre_key(const signal_signed_pre_key_t *signed_pre_key,
-                                            const signal_identity_key_t *identity_key)
+protocol_error_t protocol_verify_signed_pre_key(const protocol_signed_pre_key_t *signed_pre_key,
+                                                const protocol_identity_key_t *identity_key)
 {
     if (!signed_pre_key || !identity_key)
     {
-        return SIGNAL_ERROR_INVALID_PARAMETER;
+        return PROTOCOL_ERROR_INVALID_PARAMETER;
     }
 
     // Verify the signature
@@ -419,13 +420,13 @@ signal_error_t signal_verify_signed_pre_key(const signal_signed_pre_key_t *signe
                     signed_pre_key->key.key, CURVE25519_KEY_SIZE,
                     computed_signature, NULL) != CRYPTO_OK)
     {
-        return SIGNAL_ERROR_INTERNAL;
+        return PROTOCOL_ERROR_INTERNAL;
     }
 
     if (memcmp(computed_signature, signed_pre_key->signature, 64) != 0)
     {
-        return SIGNAL_ERROR_INVALID_SIGNATURE;
+        return PROTOCOL_ERROR_INVALID_SIGNATURE;
     }
 
-    return SIGNAL_OK;
+    return PROTOCOL_OK;
 }

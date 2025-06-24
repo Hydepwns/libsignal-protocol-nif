@@ -434,23 +434,49 @@ crypto_error_t evp_serialize_public_key(EVP_PKEY *key, uint8_t *buffer, size_t *
         return CRYPTO_ERROR_INVALID_PARAMETER;
     }
 
-    size_t len = 0;
-    if (EVP_PKEY_get_raw_public_key(key, NULL, &len) <= 0)
+    // For EC keys, we need to serialize the point
+    EC_KEY *ec_key = EVP_PKEY_get1_EC_KEY(key);
+    if (!ec_key)
     {
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    const EC_POINT *point = EC_KEY_get0_public_key(ec_key);
+    if (!point)
+    {
+        EC_KEY_free(ec_key);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    const EC_GROUP *group = EC_KEY_get0_group(ec_key);
+    if (!group)
+    {
+        EC_KEY_free(ec_key);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    // Get the size needed for uncompressed point
+    size_t len = EC_POINT_point2oct(group, point, POINT_CONVERSION_UNCOMPRESSED, NULL, 0, NULL);
+    if (len == 0)
+    {
+        EC_KEY_free(ec_key);
         return CRYPTO_ERROR_INTERNAL;
     }
 
     if (len > *buffer_len)
     {
+        EC_KEY_free(ec_key);
         return CRYPTO_ERROR_INVALID_PARAMETER;
     }
 
-    if (EVP_PKEY_get_raw_public_key(key, buffer, &len) <= 0)
+    if (EC_POINT_point2oct(group, point, POINT_CONVERSION_UNCOMPRESSED, buffer, len, NULL) == 0)
     {
+        EC_KEY_free(ec_key);
         return CRYPTO_ERROR_INTERNAL;
     }
 
     *buffer_len = len;
+    EC_KEY_free(ec_key);
     return CRYPTO_OK;
 }
 
@@ -461,12 +487,74 @@ crypto_error_t evp_deserialize_public_key(const uint8_t *buffer, size_t buffer_l
         return CRYPTO_ERROR_INVALID_PARAMETER;
     }
 
-    *key = EVP_PKEY_new_raw_public_key(EVP_PKEY_EC, NULL, buffer, buffer_len);
-    if (!*key)
+    // Create EC group for P-256
+    EC_GROUP *group = EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
+    if (!group)
     {
         return CRYPTO_ERROR_INTERNAL;
     }
 
+    // Create EC point from buffer
+    EC_POINT *point = EC_POINT_new(group);
+    if (!point)
+    {
+        EC_GROUP_free(group);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    if (EC_POINT_oct2point(group, point, buffer, buffer_len, NULL) == 0)
+    {
+        EC_POINT_free(point);
+        EC_GROUP_free(group);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    // Create EC key with the point
+    EC_KEY *ec_key = EC_KEY_new();
+    if (!ec_key)
+    {
+        EC_POINT_free(point);
+        EC_GROUP_free(group);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    if (EC_KEY_set_group(ec_key, group) == 0)
+    {
+        EC_KEY_free(ec_key);
+        EC_POINT_free(point);
+        EC_GROUP_free(group);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    if (EC_KEY_set_public_key(ec_key, point) == 0)
+    {
+        EC_KEY_free(ec_key);
+        EC_POINT_free(point);
+        EC_GROUP_free(group);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    // Create EVP_PKEY from EC key
+    *key = EVP_PKEY_new();
+    if (!*key)
+    {
+        EC_KEY_free(ec_key);
+        EC_POINT_free(point);
+        EC_GROUP_free(group);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    if (EVP_PKEY_assign_EC_KEY(*key, ec_key) == 0)
+    {
+        EVP_PKEY_free(*key);
+        *key = NULL;
+        EC_POINT_free(point);
+        EC_GROUP_free(group);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    EC_POINT_free(point);
+    EC_GROUP_free(group);
     return CRYPTO_OK;
 }
 
@@ -477,23 +565,42 @@ crypto_error_t evp_serialize_private_key(EVP_PKEY *key, uint8_t *buffer, size_t 
         return CRYPTO_ERROR_INVALID_PARAMETER;
     }
 
-    size_t len = 0;
-    if (EVP_PKEY_get_raw_private_key(key, NULL, &len) <= 0)
+    // For EC private keys, we need to serialize the private key
+    EC_KEY *ec_key = EVP_PKEY_get1_EC_KEY(key);
+    if (!ec_key)
     {
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    const BIGNUM *priv = EC_KEY_get0_private_key(ec_key);
+    if (!priv)
+    {
+        EC_KEY_free(ec_key);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    // Get the size needed for the private key
+    size_t len = BN_num_bytes(priv);
+    if (len == 0)
+    {
+        EC_KEY_free(ec_key);
         return CRYPTO_ERROR_INTERNAL;
     }
 
     if (len > *buffer_len)
     {
+        EC_KEY_free(ec_key);
         return CRYPTO_ERROR_INVALID_PARAMETER;
     }
 
-    if (EVP_PKEY_get_raw_private_key(key, buffer, &len) <= 0)
+    if (BN_bn2bin(priv, buffer) != len)
     {
+        EC_KEY_free(ec_key);
         return CRYPTO_ERROR_INTERNAL;
     }
 
     *buffer_len = len;
+    EC_KEY_free(ec_key);
     return CRYPTO_OK;
 }
 
@@ -504,12 +611,76 @@ crypto_error_t evp_deserialize_private_key(const uint8_t *buffer, size_t buffer_
         return CRYPTO_ERROR_INVALID_PARAMETER;
     }
 
-    *key = EVP_PKEY_new_raw_private_key(EVP_PKEY_EC, NULL, buffer, buffer_len);
-    if (!*key)
+    // Create EC group for P-256
+    EC_GROUP *group = EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
+    if (!group)
     {
         return CRYPTO_ERROR_INTERNAL;
     }
 
+    // Create BIGNUM from buffer
+    BIGNUM *priv = BN_bin2bn(buffer, buffer_len, NULL);
+    if (!priv)
+    {
+        EC_GROUP_free(group);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    // Create EC key with the private key
+    EC_KEY *ec_key = EC_KEY_new();
+    if (!ec_key)
+    {
+        BN_free(priv);
+        EC_GROUP_free(group);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    if (EC_KEY_set_group(ec_key, group) == 0)
+    {
+        EC_KEY_free(ec_key);
+        BN_free(priv);
+        EC_GROUP_free(group);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    if (EC_KEY_set_private_key(ec_key, priv) == 0)
+    {
+        EC_KEY_free(ec_key);
+        BN_free(priv);
+        EC_GROUP_free(group);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    // Compute public key from private key
+    if (EC_KEY_generate_key(ec_key) == 0)
+    {
+        EC_KEY_free(ec_key);
+        BN_free(priv);
+        EC_GROUP_free(group);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    // Create EVP_PKEY from EC key
+    *key = EVP_PKEY_new();
+    if (!*key)
+    {
+        EC_KEY_free(ec_key);
+        BN_free(priv);
+        EC_GROUP_free(group);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    if (EVP_PKEY_assign_EC_KEY(*key, ec_key) == 0)
+    {
+        EVP_PKEY_free(*key);
+        *key = NULL;
+        BN_free(priv);
+        EC_GROUP_free(group);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    BN_free(priv);
+    EC_GROUP_free(group);
     return CRYPTO_OK;
 }
 

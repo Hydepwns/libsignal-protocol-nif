@@ -1,9 +1,16 @@
 cmake_minimum_required(VERSION 3.10)
-project(libsignal_protocol_nif C)
+project(nif C)
 
 # Set C standard
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+
+# Set OpenSSL paths explicitly for Homebrew on Apple Silicon
+if(APPLE)
+    set(OPENSSL_ROOT_DIR "/opt/homebrew/opt/openssl@3")
+    set(OPENSSL_INCLUDE_DIR "${OPENSSL_ROOT_DIR}/include")
+    set(OPENSSL_LIBRARIES "${OPENSSL_ROOT_DIR}/lib/libcrypto.a;${OPENSSL_ROOT_DIR}/lib/libssl.a")
+endif()
 
 # Find required packages
 find_package(OpenSSL REQUIRED)
@@ -41,47 +48,53 @@ if(NOT EXISTS "${ERLANG_LIB_DIR}")
 endif()
 
 # Add include directories
+if(APPLE)
+    include_directories(/opt/homebrew/opt/openssl@3/include)
+endif()
 include_directories(${OPENSSL_INCLUDE_DIRS} ${ERLANG_INCLUDE_DIR})
 
-# Add source files
-add_library(libsignal_protocol_nif SHARED
-    libsignal_protocol_nif.c
+# Add source files - only build the main NIF implementation
+add_library(nif SHARED
+    nif.c
     crypto/crypto.c
-    protocol/signal_protocol.c
+    protocol/protocol.c
+    protocol/protocol.h
 )
 
-# Set output directory and name
-set_target_properties(libsignal_protocol_nif PROPERTIES
+# Set output directory and name for nif
+set_target_properties(nif PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/../priv"
-    OUTPUT_NAME "signal_protocol_nif"
+    OUTPUT_NAME "nif"
 )
 
-# Link libraries
-target_link_libraries(libsignal_protocol_nif
+# Link libraries for nif
+target_link_libraries(nif
     ${OPENSSL_LIBRARIES}
 )
 
 # Set compile flags based on platform
 if(APPLE)
-    target_compile_definitions(libsignal_protocol_nif PRIVATE
+    target_compile_definitions(nif PRIVATE
         __APPLE__=1
         __DARWIN__=1
     )
-    set_target_properties(libsignal_protocol_nif PROPERTIES
+    set_target_properties(nif PROPERTIES
         SUFFIX ".dylib"
-        LINK_FLAGS "-undefined dynamic_lookup"
+        LINK_FLAGS "-undefined dynamic_lookup -Wl,-exported_symbol,_nif_init -Wl,-exported_symbol,_nif_funcs -Wl,-rpath,@loader_path"
     )
 elseif(UNIX)
-    set_target_properties(libsignal_protocol_nif PROPERTIES
+    set_target_properties(nif PROPERTIES
         SUFFIX ".so"
+        LINK_FLAGS "-Wl,--export-dynamic"
     )
 elseif(WIN32)
-    set_target_properties(libsignal_protocol_nif PROPERTIES
+    set_target_properties(nif PROPERTIES
         SUFFIX ".dll"
+        LINK_FLAGS "/EXPORT:nif_funcs"
     )
 endif()
 
 # Install rules
-install(TARGETS libsignal_protocol_nif
+install(TARGETS nif
     LIBRARY DESTINATION priv
 )
