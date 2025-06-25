@@ -1,6 +1,4 @@
 import gleam/int
-import gleam/option.{None, Some}
-import gleam/result
 
 /// Represents a Signal Protocol session.
 pub type Session {

@@ -1,5 +1,3 @@
-import gleam/int
-import gleam/result
 import pre_key_bundle
 import session
 import signal_protocol.{
