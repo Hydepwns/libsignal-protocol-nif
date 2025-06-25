@@ -32,7 +32,7 @@ create_bundle_binary(RegistrationId,
       IdentityKey:IdentityKeyLen/binary>>.
 
 all() ->
-    [fast, expensive].
+    [{group, fast}, {group, expensive}].
 
 groups() ->
     [{fast,

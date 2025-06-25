@@ -6,7 +6,7 @@
 -compile(export_all).
 
 all() ->
-    [fast, expensive].
+    [{group, fast}, {group, expensive}].
 
 groups() ->
     [{fast,
