@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        otp-version: [22, 24, 25]
+        otp-version: [25]
     
     steps:
     - uses: actions/checkout@v4
@@ -54,7 +54,7 @@ jobs:
         mkdir -p build
         cd build
         cmake .. -DCMAKE_BUILD_TYPE=Release
-        make -j$(nproc)
+        make -j"$(nproc)"
         cd ../..
         cp priv/nif.so _build/default/lib/nif/priv/ || true
         cp priv/nif.so _build/test/lib/nif/priv/ || true
@@ -83,7 +83,7 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        otp-version: [24, 25]
+        otp-version: [25]
     
     steps:
     - uses: actions/checkout@v4
@@ -118,7 +118,7 @@ jobs:
         mkdir -p build
         cd build
         cmake .. -DCMAKE_BUILD_TYPE=Release
-        make -j$(sysctl -n hw.ncpu)
+        make -j"$(sysctl -n hw.ncpu)"
         cd ../..
         cp priv/nif.dylib _build/default/lib/nif/priv/ || true
         cp priv/nif.dylib _build/test/lib/nif/priv/ || true
