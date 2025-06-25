@@ -25,7 +25,7 @@ make test       # Run tests
 
 ## Installation & Usage
 
-<details>
+<details id="erlang">
 
 ### Erlang
 
@@ -47,7 +47,7 @@ ok = libsignal_protocol_nif:init(),
 
 </details>
 
-<details>
+<details id="elixir">
 
 ### Elixir
 
@@ -69,7 +69,7 @@ ok = libsignal_protocol_nif:init(),
 
 </details>
 
-<details>
+<details id="gleam">
 
 ### Gleam
 
