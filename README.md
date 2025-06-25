@@ -2,6 +2,12 @@
 
 Cross-platform BEAM wrappers (Erlang/Elixir/Gleam) for the Signal Protocol library, implemented with OpenSSL cryptographic primitives.
 
+## Architecture
+
+- **NIF Layer**: C implementation using OpenSSL for cryptographic operations
+- **Erlang Interface**: GenServer-based API for session management
+- **Multi-language Support**: Wrappers for Elixir and Gleam
+
 ## Features
 
 - End-to-end encryption using Signal Protocol
@@ -20,15 +26,16 @@ make test       # Run tests
 ## Installation & Usage
 
 <details>
-<summary><strong>Erlang</strong></summary>
 
-### Installation
+### Erlang
+
+### Erlang Installation
 
 ```erlang
 {deps, [{libsignal_protocol_nif, {git, "https://github.com/Hydepwns/libsignal-protocol-nif.git"}}]}.
 ```
 
-### Usage
+### Erlang Usage
 
 ```erlang
 ok = libsignal_protocol_nif:init(),
@@ -41,15 +48,16 @@ ok = libsignal_protocol_nif:init(),
 </details>
 
 <details>
-<summary><strong>Elixir</strong></summary>
 
-### Installation
+### Elixir
+
+### Elixir Installation
 
 ```elixir
 {:libsignal_protocol_nif, "~> 0.1.0"}
 ```
 
-### Usage
+### Elixir Usage
 
 ```elixir
 {:ok, pid} = SignalProtocol.start_link()
@@ -62,16 +70,17 @@ ok = libsignal_protocol_nif:init(),
 </details>
 
 <details>
-<summary><strong>Gleam</strong></summary>
 
-### Installation
+### Gleam
+
+### Gleam Installation
 
 ```toml
 [dependencies]
 libsignal_protocol_gleam = "~> 0.1.0"
 ```
 
-### Usage
+### Gleam Usage
 
 ```gleam
 case libsignal_protocol_gleam.init() {
@@ -108,8 +117,91 @@ make build-elixir  # Build Elixir wrapper
 make build-gleam   # Build Gleam wrapper
 ```
 
-### Testing
+## Testing
+
+### Test Groups
+
+The test suites are organized into two groups to handle expensive cryptographic operations:
+
+- **Fast tests**: Basic functionality, error handling, and simple operations
+- **Expensive tests**: Concurrent operations, large data processing, and stress tests
+
+### Running Tests
+
+**Run only fast tests (recommended for development):**
 
 ```bash
-make test       # Run tests
+rebar3 as test ct --group fast --cover
 ```
+
+**Run only expensive tests:**
+
+```bash
+rebar3 as test ct --group expensive
+```
+
+**Run all tests (may take a long time):**
+
+```bash
+rebar3 as test ct --cover
+```
+
+**Run specific test suites:**
+
+```bash
+# Fast tests only
+rebar3 as test ct --suite=test/erl/protocol_SUITE --group fast --cover
+
+# All tests in a suite
+rebar3 as test ct --suite=test/erl/protocol_SUITE --cover
+```
+
+### Test Coverage
+
+**Individual test suite coverage:**
+
+```bash
+rebar3 cover
+```
+
+The coverage report will be available in `_build/test/cover/index.html`.
+
+**Combined coverage from all test suites:**
+
+```bash
+./scripts/aggregate_coverage.sh
+```
+
+This script runs all test suites sequentially and accumulates coverage data, providing a comprehensive coverage report across all modules.
+
+## Usage
+
+```erlang
+% Initialize the NIF
+ok = nif:init().
+
+% Generate identity key pair
+{ok, {PublicKey, PrivateKey}} = nif:generate_identity_key_pair().
+
+% Generate pre-key
+{ok, {KeyId, PreKey}} = nif:generate_pre_key(12345).
+
+% Generate signed pre-key
+{ok, {KeyId, SignedPreKey, Signature}} = nif:generate_signed_pre_key(IdentityKey, 67890).
+
+% Create session
+{ok, Session} = nif:create_session(IdentityKey).
+
+% Process pre-key bundle
+{ok, UpdatedSession} = nif:process_pre_key_bundle(Session, Bundle).
+
+% Encrypt message
+{ok, EncryptedMessage} = nif:encrypt_message(Session, Message).
+
+% Decrypt message
+{ok, DecryptedMessage} = nif:decrypt_message(Session, EncryptedMessage).
+```
+
+## License
+
+[MIT](LICENSE)
