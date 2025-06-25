@@ -234,6 +234,8 @@ static ERL_NIF_TERM decrypt_message(ErlNifEnv *env, int argc, const ERL_NIF_TERM
 static ERL_NIF_TERM get_cache_stats(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 static ERL_NIF_TERM reset_cache_stats(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 static ERL_NIF_TERM set_cache_size(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
+static ERL_NIF_TERM verify_signature(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
+static ERL_NIF_TERM compute_key(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]);
 
 // NIF function definitions
 static ErlNifFunc nif_funcs[] = {
@@ -244,6 +246,8 @@ static ErlNifFunc nif_funcs[] = {
     {"process_pre_key_bundle", 2, process_pre_key_bundle, 0},
     {"encrypt_message", 2, encrypt_message, 0},
     {"decrypt_message", 2, decrypt_message, 0},
+    {"verify_signature", 3, verify_signature, 0},
+    {"compute_key", 4, compute_key, 0},
     {"get_cache_stats", 1, get_cache_stats, 0},
     {"reset_cache_stats", 1, reset_cache_stats, 0},
     {"set_cache_size", 3, set_cache_size, 0}};
@@ -443,25 +447,39 @@ static ERL_NIF_TERM key_to_binary(ErlNifEnv *env, EVP_PKEY *key, int is_public)
         }
         else
         {
-            // For Ed25519 private key, extract raw private key
-            uint8_t buffer[CURVE25519_KEY_SIZE];
-            size_t buffer_len = sizeof(buffer);
-            fprintf(stderr, "[NIF DEBUG] key_to_binary: serializing Ed25519 private key\n");
+            // For Ed25519 private key, extract raw private key and public key
+            // Erlang's crypto:sign/verify expects 64-byte private key (private + public concatenated)
+            uint8_t private_buffer[CURVE25519_KEY_SIZE];
+            uint8_t public_buffer[CURVE25519_KEY_SIZE];
+            uint8_t combined_buffer[CURVE25519_KEY_SIZE * 2]; // 64 bytes
+            size_t private_len = sizeof(private_buffer);
+            size_t public_len = sizeof(public_buffer);
+            fprintf(stderr, "[NIF DEBUG] key_to_binary: serializing Ed25519 private key (64-byte format)\n");
 
-            if (EVP_PKEY_get_raw_private_key(key, buffer, &buffer_len) <= 0 || buffer_len != CURVE25519_KEY_SIZE)
+            if (EVP_PKEY_get_raw_private_key(key, private_buffer, &private_len) <= 0 || private_len != CURVE25519_KEY_SIZE)
             {
                 fprintf(stderr, "[NIF DEBUG] key_to_binary: failed to get raw Ed25519 private key\n");
                 return make_error(env, "Failed to serialize Ed25519 private key");
             }
 
+            if (EVP_PKEY_get_raw_public_key(key, public_buffer, &public_len) <= 0 || public_len != CURVE25519_KEY_SIZE)
+            {
+                fprintf(stderr, "[NIF DEBUG] key_to_binary: failed to get raw Ed25519 public key\n");
+                return make_error(env, "Failed to serialize Ed25519 public key");
+            }
+
+            // Concatenate private key (32 bytes) + public key (32 bytes) = 64 bytes
+            memcpy(combined_buffer, private_buffer, CURVE25519_KEY_SIZE);
+            memcpy(combined_buffer + CURVE25519_KEY_SIZE, public_buffer, CURVE25519_KEY_SIZE);
+
             ERL_NIF_TERM binary;
-            unsigned char *bin_buffer = enif_make_new_binary(env, buffer_len, &binary);
+            unsigned char *bin_buffer = enif_make_new_binary(env, CURVE25519_KEY_SIZE * 2, &binary);
             if (!bin_buffer)
             {
                 fprintf(stderr, "[NIF DEBUG] key_to_binary: failed to allocate binary for Ed25519 private key\n");
                 return make_error(env, "Failed to allocate binary");
             }
-            memcpy(bin_buffer, buffer, buffer_len);
+            memcpy(bin_buffer, combined_buffer, CURVE25519_KEY_SIZE * 2);
             return binary;
         }
     }
@@ -1340,6 +1358,14 @@ static ERL_NIF_TERM generate_signed_pre_key(ErlNifEnv *env, int argc, const ERL_
         return make_error(env, "Invalid arguments");
     }
 
+    fprintf(stderr, "[NIF DEBUG] generate_signed_pre_key: identity_key size=%zu\n", identity_key.size);
+    fprintf(stderr, "[NIF DEBUG] generate_signed_pre_key: identity_key (hex): ");
+    for (size_t i = 0; i < identity_key.size && i < 32; i++)
+    {
+        fprintf(stderr, "%02X ", identity_key.data[i]);
+    }
+    fprintf(stderr, "\n");
+
     if (!generate_ed25519_key_pair(&key))
     {
         return make_error(env, "Failed to generate signed pre-key");
@@ -1347,6 +1373,30 @@ static ERL_NIF_TERM generate_signed_pre_key(ErlNifEnv *env, int argc, const ERL_
 
     public_key = key_to_binary(env, key, 1);
     signature = sign_data(env, key, identity_key.data, identity_key.size);
+
+    // Debug: print the public key and signature
+    ErlNifBinary pub_bin, sig_bin;
+    if (enif_inspect_binary(env, public_key, &pub_bin))
+    {
+        fprintf(stderr, "[NIF DEBUG] generate_signed_pre_key: public_key size=%zu\n", pub_bin.size);
+        fprintf(stderr, "[NIF DEBUG] generate_signed_pre_key: public_key (hex): ");
+        for (size_t i = 0; i < pub_bin.size && i < 32; i++)
+        {
+            fprintf(stderr, "%02X ", pub_bin.data[i]);
+        }
+        fprintf(stderr, "\n");
+    }
+
+    if (enif_inspect_binary(env, signature, &sig_bin))
+    {
+        fprintf(stderr, "[NIF DEBUG] generate_signed_pre_key: signature size=%zu\n", sig_bin.size);
+        fprintf(stderr, "[NIF DEBUG] generate_signed_pre_key: signature (hex): ");
+        for (size_t i = 0; i < sig_bin.size && i < 64; i++)
+        {
+            fprintf(stderr, "%02X ", sig_bin.data[i]);
+        }
+        fprintf(stderr, "\n");
+    }
 
     EVP_PKEY_free(key);
     return make_ok(env, enif_make_tuple3(env, enif_make_int(env, key_id), public_key, signature));
@@ -1837,4 +1887,105 @@ static ERL_NIF_TERM set_cache_size(ErlNifEnv *env, int argc, const ERL_NIF_TERM 
     }
 
     return make_ok(env, enif_make_atom(env, "ok"));
+}
+
+static ERL_NIF_TERM verify_signature(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    if (argc != 3)
+    {
+        return enif_make_badarg(env);
+    }
+
+    ErlNifBinary public_key_bin, data_bin, signature_bin;
+    if (!enif_inspect_binary(env, argv[0], &public_key_bin) ||
+        !enif_inspect_binary(env, argv[1], &data_bin) ||
+        !enif_inspect_binary(env, argv[2], &signature_bin))
+    {
+        return enif_make_badarg(env);
+    }
+
+    // Create EVP_PKEY from public key
+    EVP_PKEY *public_key = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, NULL,
+                                                       public_key_bin.data, public_key_bin.size);
+    if (!public_key)
+    {
+        return make_error(env, "Failed to create public key");
+    }
+
+    // Verify signature using the crypto module
+    crypto_error_t result = evp_verify_signature(public_key, data_bin.data, data_bin.size,
+                                                 signature_bin.data, signature_bin.size);
+
+    EVP_PKEY_free(public_key);
+
+    if (result == CRYPTO_OK)
+    {
+        return make_ok(env, enif_make_atom(env, "true"));
+    }
+    else
+    {
+        return make_error(env, "invalid_signature");
+    }
+}
+
+static ERL_NIF_TERM compute_key(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    if (argc != 4)
+    {
+        return enif_make_badarg(env);
+    }
+
+    // Parse algorithm and curve (we only support ecdh/curve25519)
+    char algorithm[32], curve[32];
+    if (!enif_get_atom(env, argv[0], algorithm, sizeof(algorithm), ERL_NIF_LATIN1) ||
+        !enif_get_atom(env, argv[3], curve, sizeof(curve), ERL_NIF_LATIN1))
+    {
+        return enif_make_badarg(env);
+    }
+
+    if (strcmp(algorithm, "ecdh") != 0 || strcmp(curve, "curve25519") != 0)
+    {
+        return make_error(env, "unsupported_algorithm");
+    }
+
+    ErlNifBinary public_key_bin, private_key_bin;
+    if (!enif_inspect_binary(env, argv[1], &public_key_bin) ||
+        !enif_inspect_binary(env, argv[2], &private_key_bin))
+    {
+        return enif_make_badarg(env);
+    }
+
+    // Create EVP_PKEY objects
+    EVP_PKEY *public_key = EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, NULL,
+                                                       public_key_bin.data, public_key_bin.size);
+    EVP_PKEY *private_key = EVP_PKEY_new_raw_private_key(EVP_PKEY_X25519, NULL,
+                                                         private_key_bin.data, private_key_bin.size);
+
+    if (!public_key || !private_key)
+    {
+        if (public_key)
+            EVP_PKEY_free(public_key);
+        if (private_key)
+            EVP_PKEY_free(private_key);
+        return make_error(env, "Failed to create keys");
+    }
+
+    // Calculate shared secret
+    uint8_t shared_secret[32];
+    size_t shared_secret_len = sizeof(shared_secret);
+
+    crypto_error_t result = calculate_dh_shared_secret(private_key, public_key,
+                                                       shared_secret, &shared_secret_len);
+
+    EVP_PKEY_free(public_key);
+    EVP_PKEY_free(private_key);
+
+    if (result == CRYPTO_OK)
+    {
+        return make_ok(env, make_binary(env, shared_secret, shared_secret_len));
+    }
+    else
+    {
+        return make_error(env, "Failed to compute shared secret");
+    }
 }
