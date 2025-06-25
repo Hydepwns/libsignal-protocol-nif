@@ -100,24 +100,24 @@ test_complete_signal_workflow(_Config) ->
          binary:copy(<<"Long message from Bob: ">>, 100)],
 
     % Alice sends first message
-    {ok, AliceEncrypted1} =
-        nif:encrypt_message(AliceEstablishedSession, lists:nth(1, Messages)),
-    {ok, BobDecrypted1} = nif:decrypt_message(BobEstablishedSession, AliceEncrypted1),
+    {ok, AliceEncrypted1, AliceSession1} =
+        signal_session:encrypt(AliceEstablishedSession, lists:nth(1, Messages)),
+    {ok, BobDecrypted1, BobSession1} = signal_session:decrypt(BobEstablishedSession, AliceEncrypted1),
     ?assertEqual(lists:nth(1, Messages), BobDecrypted1),
 
     % Bob sends response
-    {ok, BobEncrypted1} = nif:encrypt_message(BobEstablishedSession, lists:nth(2, Messages)),
-    {ok, AliceDecrypted1} = nif:decrypt_message(AliceEstablishedSession, BobEncrypted1),
+    {ok, BobEncrypted1, BobSession2} = signal_session:encrypt(BobSession1, lists:nth(2, Messages)),
+    {ok, AliceDecrypted1, AliceSession2} = signal_session:decrypt(AliceSession1, BobEncrypted1),
     ?assertEqual(lists:nth(2, Messages), AliceDecrypted1),
 
     % Continue conversation
-    {ok, AliceEncrypted2} =
-        nif:encrypt_message(AliceEstablishedSession, lists:nth(3, Messages)),
-    {ok, BobDecrypted2} = nif:decrypt_message(BobEstablishedSession, AliceEncrypted2),
+    {ok, AliceEncrypted2, AliceSession3} =
+        signal_session:encrypt(AliceSession2, lists:nth(3, Messages)),
+    {ok, BobDecrypted2, BobSession3} = signal_session:decrypt(BobSession2, AliceEncrypted2),
     ?assertEqual(lists:nth(3, Messages), BobDecrypted2),
 
-    {ok, BobEncrypted2} = nif:encrypt_message(BobEstablishedSession, lists:nth(4, Messages)),
-    {ok, AliceDecrypted2} = nif:decrypt_message(AliceEstablishedSession, BobEncrypted2),
+    {ok, BobEncrypted2, _BobSession4} = signal_session:encrypt(BobSession3, lists:nth(4, Messages)),
+    {ok, AliceDecrypted2, _AliceSession4} = signal_session:decrypt(AliceSession3, BobEncrypted2),
     ?assertEqual(lists:nth(4, Messages), AliceDecrypted2),
 
     io:format("Complete Signal Protocol workflow test passed~n").
@@ -142,22 +142,23 @@ test_bidirectional_communication(_Config) ->
     Messages =
         [crypto:strong_rand_bytes(100 + rand:uniform(900)) || _ <- lists:seq(1, NumMessages)],
 
-    [begin
-         Index = (I - 1) rem 2 + 1,
-         Message = lists:nth(I, Messages),
+    lists:foldl(fun(I, {AliceSess, BobSess}) ->
+                    Index = (I - 1) rem 2 + 1,
+                    Message = lists:nth(I, Messages),
 
-         case Index of
-             1 -> % Alice sends
-                 {ok, Encrypted} = nif:encrypt_message(AliceSession, Message),
-                 {ok, Decrypted} = nif:decrypt_message(BobSession, Encrypted),
-                 ?assertEqual(Message, Decrypted);
-             2 -> % Bob sends
-                 {ok, Encrypted} = nif:encrypt_message(BobSession, Message),
-                 {ok, Decrypted} = nif:decrypt_message(AliceSession, Encrypted),
-                 ?assertEqual(Message, Decrypted)
-         end
-     end
-     || I <- lists:seq(1, NumMessages)],
+                    case Index of
+                        1 -> % Alice sends
+                            {ok, Encrypted, AliceSessionUpdated} = signal_session:encrypt(AliceSess, Message),
+                            {ok, Decrypted, BobSessionUpdated} = signal_session:decrypt(BobSess, Encrypted),
+                            ?assertEqual(Message, Decrypted),
+                            {AliceSessionUpdated, BobSessionUpdated};
+                        2 -> % Bob sends
+                            {ok, Encrypted, BobSessionUpdated} = signal_session:encrypt(BobSess, Message),
+                            {ok, Decrypted, AliceSessionUpdated} = signal_session:decrypt(AliceSess, Encrypted),
+                            ?assertEqual(Message, Decrypted),
+                            {AliceSessionUpdated, BobSessionUpdated}
+                    end
+                end, {AliceSession, BobSession}, lists:seq(1, NumMessages)),
 
     io:format("Bidirectional communication test passed with ~p messages~n", [NumMessages]).
 
@@ -581,13 +582,13 @@ establish_sessions(AliceIdentityPublic,
          {BobSignedPreKeyId, BobSignedPreKey, BobSignature},
          BobIdentityPublic},
 
-    % Create sessions
-    {ok, AliceSession} = nif:create_session(AliceIdentityPublic),
-    {ok, BobSession} = nif:create_session(BobIdentityPublic),
+    % Create sessions using signal_session module
+    AliceSession = signal_session:new(AliceIdentityPublic, BobIdentityPublic),
+    BobSession = signal_session:new(BobIdentityPublic, AliceIdentityPublic),
 
-    % Process bundles
-    {ok, AliceEstablishedSession} = nif:process_pre_key_bundle(AliceSession, BobBundle),
-    {ok, BobEstablishedSession} = nif:process_pre_key_bundle(BobSession, AliceBundle),
+    % Process bundles using signal_session module
+    {ok, AliceEstablishedSession} = signal_session:process_pre_key_bundle(AliceSession, BobBundle),
+    {ok, BobEstablishedSession} = signal_session:process_pre_key_bundle(BobSession, AliceBundle),
 
     {AliceEstablishedSession, BobEstablishedSession}.
 
