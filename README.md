@@ -19,72 +19,46 @@ Cross-platform BEAM wrappers (Erlang/Elixir/Gleam) for the Signal Protocol libra
 ## Quick Start
 
 ```bash
+# Git + Makefile
+git clone https://github.com/Hydepwns/libsignal-protocol-nif.git
+cd libsignal-protocol-nif
 make build      # Build everything
 make test       # Run tests
 make clean      # Clean build artifacts (optional)
+make clean-all  # Clean build artifacts and dependencies (optional)
 ```
 
-## Installation & Usage (Erlang/Elixir/Gleam)
+## Installation
 
 ### Erlang
 
 ```erlang
+% rebar.config
 {deps, [{libsignal_protocol_nif, {git, "https://github.com/Hydepwns/libsignal-protocol-nif.git"}}]}.
 ```
 
 ### Elixir
 
 ```elixir
+# mix.exs
 mix deps.add libsignal_protocol_nif --git "https://github.com/Hydepwns/libsignal-protocol-nif.git"
 mix deps.get
 ```
 
 ```elixir
+# mix.exs
 {:libsignal_protocol_nif, git: "https://github.com/Hydepwns/libsignal-protocol-nif.git"}
 ```
 
 ### Gleam
 
 ```toml
+# gleam.toml
 [dependencies]
 libsignal_protocol_gleam = "~> 0.1.0"
 ```
 
-## Usage
-
-```erlang
-ok = libsignal_protocol_nif:init(),
-{ok, {Pub, Priv}} = libsignal_protocol_nif:generate_identity_key_pair(),
-{ok, Session} = libsignal_protocol_nif:create_session(Pub, RemotePub),
-{ok, Encrypted} = libsignal_protocol_nif:encrypt_message(Session, "Hello!"),
-{ok, Decrypted} = libsignal_protocol_nif:decrypt_message(Session, Encrypted).
-```
-
-```elixir
-{:ok, pid} = SignalProtocol.start_link()
-{:ok, {Pub, Priv}} = SignalProtocol.generate_identity_key_pair()
-{:ok, session} = SignalProtocol.create_session(Pub, RemotePub)
-{:ok, encrypted} = SignalProtocol.encrypt_message(session, "Hello!")
-{:ok, decrypted} = SignalProtocol.decrypt_message(session, encrypted)
-```
-
-```gleam
-case libsignal_protocol_gleam.init() {
-  Ok(_) -> case libsignal_protocol_gleam.generate_identity_key_pair() {
-    Ok(keys) -> case libsignal_protocol_gleam.create_session(Pub, RemotePub) {
-      Ok(session) -> case libsignal_protocol_gleam.encrypt_message(session, "Hello!") {
-        Ok(encrypted) -> libsignal_protocol_gleam.decrypt_message(session, encrypted)
-        Error(e) -> Error(e)
-      }
-      Error(e) -> Error(e)
-    }
-    Error(e) -> Error(e)
-  }
-  Error(e) -> Error(e)
-}
-```
-
-## Building
+## Building & Testing
 
 ### Unified Build (Recommended)
 
@@ -101,7 +75,44 @@ make build-elixir  # Build Elixir wrapper
 make build-gleam   # Build Gleam wrapper
 ```
 
-## Testing
+## Usage (Erlang/Elixir/Gleam)
+
+```erlang
+% example.erl
+ok = libsignal_protocol_nif:init(),
+{ok, {Pub, Priv}} = libsignal_protocol_nif:generate_identity_key_pair(),
+{ok, Session} = libsignal_protocol_nif:create_session(Pub, RemotePub),
+{ok, Encrypted} = libsignal_protocol_nif:encrypt_message(Session, "Hello!"),
+{ok, Decrypted} = libsignal_protocol_nif:decrypt_message(Session, Encrypted).
+```
+
+```elixir
+# example.exs
+{:ok, pid} = SignalProtocol.start_link()
+{:ok, {Pub, Priv}} = SignalProtocol.generate_identity_key_pair()
+{:ok, session} = SignalProtocol.create_session(Pub, RemotePub)
+{:ok, encrypted} = SignalProtocol.encrypt_message(session, "Hello!")
+{:ok, decrypted} = SignalProtocol.decrypt_message(session, encrypted)
+```
+
+```gleam
+// example.gleam
+case libsignal_protocol_gleam.init() {
+  Ok(_) -> case libsignal_protocol_gleam.generate_identity_key_pair() {
+    Ok(keys) -> case libsignal_protocol_gleam.create_session(Pub, RemotePub) {
+      Ok(session) -> case libsignal_protocol_gleam.encrypt_message(session, "Hello!") {
+        Ok(encrypted) -> libsignal_protocol_gleam.decrypt_message(session, encrypted)
+        Error(e) -> Error(e)
+      }
+      Error(e) -> Error(e)
+    }
+    Error(e) -> Error(e)
+  }
+  Error(e) -> Error(e)
+}
+```
+
+## Testing (Erlang)
 
 ### Test Groups
 
