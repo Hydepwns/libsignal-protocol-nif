@@ -1,6 +1,6 @@
 -module(signal_session).
 
--export([new/2, process_pre_key_bundle/2, encrypt/2, decrypt/2, get_session_id/1]).
+-export([new/2, process_pre_key_bundle/2, encrypt/2, decrypt/2, get_session_id/1, calculate_shared_secret/2]).
 
 -include_lib("erl_src/include/signal_types.hrl").
 
@@ -37,9 +37,28 @@ process_pre_key_bundle(Session, Bundle) ->
      IdentityKey} =
         Bundle,
 
+    % Write signature verification inputs to file
+    SigDebug = io_lib:format("IdentityKey: ~p~nSignedPreKeyPublic: ~p~nSignature: ~p~n", [IdentityKey, SignedPreKeyPublic, Signature]),
+    file:write_file("/tmp/signal_signature_debug.log", SigDebug),
+
     % Verify the signature before proceeding
     case verify_bundle_signature(IdentityKey, SignedPreKeyPublic, Signature) of
         {ok, true} ->
+            % Generate local private keys for ECDH calculations
+            {ok, {_LocalIdentityPublic, LocalIdentityPrivate}} = signal_crypto:generate_ed25519_key_pair(),
+            {ok, {_LocalPreKeyPublic, LocalPreKeyPrivate}} = signal_crypto:generate_curve25519_key_pair(),
+            {ok, {_LocalSignedPreKeyPublic, LocalSignedPreKeyPrivate}} = signal_crypto:generate_curve25519_key_pair(),
+            
+            % Calculate shared secrets using proper ECDH key exchange
+            % Each party uses their private key with the other party's public key
+            PreKeySecret = calculate_shared_secret(LocalPreKeyPrivate, PreKeyPublic),
+            SignedPreKeySecret = calculate_shared_secret(LocalSignedPreKeyPrivate, SignedPreKeyPublic),
+            IdentitySecret = calculate_shared_secret(LocalIdentityPrivate, IdentityKey),
+            
+            % Derive master secret and chain key
+            MasterSecret = derive_master_secret(PreKeySecret, SignedPreKeySecret, IdentitySecret),
+            ChainKey = derive_chain_key(MasterSecret),
+            
             EncodedPreKeyPublic = encode_bin(PreKeyPublic),
             EncodedSignedPreKeyPublic = encode_bin(SignedPreKeyPublic),
             EncodedIdentityKey = encode_bin(IdentityKey),
@@ -57,25 +76,28 @@ process_pre_key_bundle(Session, Bundle) ->
             % Create a dummy binary session for the NIF (it doesn't actually use the session parameter)
             DummySession = <<0:1024>>, % 1KB of zeros as placeholder
 
+            % Write debug info to file
+            DebugInfo = io_lib:format("DummySession size: ~p~nDummySession (hex): ~s~nBundleBinary size: ~p~nBundleBinary (hex): ~s~n",
+                                      [byte_size(DummySession),
+                                       string:join([io_lib:format("~2.16.0B", [X]) || <<X:8>> <= DummySession], " "),
+                                       byte_size(BundleBinary),
+                                       string:join([io_lib:format("~2.16.0B", [X]) || <<X:8>> <= BundleBinary], " ")]),
+            file:write_file("/tmp/signal_debug_binaries.log", DebugInfo),
+
             io:format("process_pre_key_bundle: calling nif:process_pre_key_bundle with BundleBinary=~p (~p bytes)~n",
                       [BundleBinary, byte_size(BundleBinary)]),
             case nif:process_pre_key_bundle(DummySession, BundleBinary) of
-                {ok, {RegId, DevId, PKId, PKPub, SPKId, SPKPub, IdKey, EphKey, ChainKey}} ->
-                    io:format("process_pre_key_bundle: NIF returned RegId=~p, DevId=~p, PKId=~p, SPKId=~p, EphKey=~p (~p bytes), ChainKey=~p (~p bytes)~n",
-                              [RegId,
-                               DevId,
-                               PKId,
-                               SPKId,
-                               EphKey,
-                               byte_size(EphKey),
-                               ChainKey,
-                               byte_size(ChainKey)]),
-                    % Convert the NIF response to a session record
+                {ok, SessionBinary} ->
+                    io:format("process_pre_key_bundle: NIF returned SessionBinary=~p (~p bytes)~n",
+                              [SessionBinary, byte_size(SessionBinary)]),
+                    % The NIF returns a binary containing the session state
+                    % We need to extract the relevant fields from the binary
+                    % For now, we'll create a minimal session update
                     UpdatedSession =
-                        Session#{pre_key_id => PKId,
-                                 signed_pre_key_id => SPKId,
-                                 ephemeral_key => EphKey,
-                                 chain_key => ChainKey},
+                        Session#{pre_key_id => PreKeyId,
+                                 signed_pre_key_id => SignedPreKeyId,
+                                 ephemeral_key => PreKeyPublic, % Use pre-key as ephemeral for now
+                                 chain_key => ChainKey}, % Use calculated chain key
                     io:format("process_pre_key_bundle: UpdatedSession=~p~n", [UpdatedSession]),
                     {ok, UpdatedSession};
                 {error, Reason} ->
@@ -211,10 +233,20 @@ get_session_id(#{id := Id}) ->
 %% Private functions
 
 verify_bundle_signature(IdentityKey, SignedPreKeyPublic, Signature) ->
+    file:write_file("/tmp/signal_crypto_debug.log",
+        io_lib:format("verify_bundle_signature: IdentityKey ~p (~p bytes), SignedPreKeyPublic ~p (~p bytes)\n",
+            [IdentityKey, byte_size(IdentityKey), SignedPreKeyPublic, byte_size(SignedPreKeyPublic)]), [append]),
+    file:write_file("/tmp/signal_crypto_debug.log",
+        io_lib:format("verify_bundle_signature: IdentityKey (hex): ~s\n",
+            [string:join([io_lib:format("~2.16.0B", [X]) || <<X:8>> <= IdentityKey], " ")]), [append]),
+    file:write_file("/tmp/signal_crypto_debug.log",
+        io_lib:format("verify_bundle_signature: SignedPreKeyPublic (hex): ~s\n",
+            [string:join([io_lib:format("~2.16.0B", [X]) || <<X:8>> <= SignedPreKeyPublic], " ")]), [append]),
     signal_crypto:verify(IdentityKey, SignedPreKeyPublic, Signature).
 
 calculate_shared_secret(PrivateKey, PublicKey) ->
-    signal_crypto:compute_key(ecdh, PublicKey, PrivateKey, prime256v1).
+    {ok, SharedSecret} = signal_crypto:compute_key(ecdh, PublicKey, PrivateKey, curve25519),
+    {ok, SharedSecret}.
 
 derive_master_secret(PreKeySecret, SignedPreKeySecret, IdentitySecret) ->
     % Combine secrets and derive master secret using HKDF

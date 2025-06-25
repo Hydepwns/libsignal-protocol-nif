@@ -54,8 +54,10 @@ handle_call({generate_pre_key, KeyId}, _From, State) ->
 handle_call({generate_signed_pre_key, IdentityKey, KeyId}, _From, State) ->
     Result = nif:generate_signed_pre_key(IdentityKey, KeyId),
     {reply, Result, State};
-handle_call({create_session, LocalIdentityKey, _RemoteIdentityKey}, _From, State) ->
-    Result = nif:create_session(LocalIdentityKey),
+handle_call({create_session, LocalIdentityKey, RemoteIdentityKey}, _From, State) ->
+    % Create a session using both keys - combine them for the NIF call
+    CombinedKey = <<LocalIdentityKey/binary, RemoteIdentityKey/binary>>,
+    Result = nif:create_session(CombinedKey),
     {reply, Result, State};
 handle_call({process_pre_key_bundle, Session, Bundle}, _From, State) ->
     Result = nif:process_pre_key_bundle(Session, Bundle),
