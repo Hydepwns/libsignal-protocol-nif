@@ -21,12 +21,140 @@ jobs:
       with:
         otp-version: ${{ matrix.otp-version }}
     
-    - name: Install dependencies
+    - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential cmake libssl-dev
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          libssl-dev \
+          pkg-config \
+          git \
+          curl \
+          wget
     
-    - name: Build and test
+    - name: Install rebar3
       run: |
-        make build
-        make test 
+        curl -fsSL -o rebar3 https://github.com/erlang/rebar3/releases/download/3.22.0/rebar3
+        chmod +x rebar3
+        sudo mv rebar3 /usr/local/bin/
+    
+    - name: Create test directories
+      run: |
+        mkdir -p tmp/ct_logs
+        mkdir -p tmp/cover
+        mkdir -p tmp/doc
+        mkdir -p tmp/perf
+        mkdir -p _build/default/lib/nif/priv
+        mkdir -p _build/test/lib/nif/priv
+    
+    - name: Build NIF
+      run: |
+        cd c_src
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release
+        make -j$(nproc)
+        cd ../..
+        cp priv/nif.so _build/default/lib/nif/priv/ || true
+        cp priv/nif.so _build/test/lib/nif/priv/ || true
+    
+    - name: Run tests
+      run: |
+        rebar3 ct --cover --verbose
+      env:
+        CT_OPTS: "--logdir=tmp/ct_logs --cover=tmp/ct_cover"
+    
+    - name: Generate coverage report
+      run: |
+        rebar3 cover --verbose
+      if: always()
+    
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      if: always()
+      with:
+        file: ./_build/test/cover/coverage.json
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  test-macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        otp-version: [24, 25]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Erlang ${{ matrix.otp-version }}
+      uses: erlef/setup-beam@v1
+      with:
+        otp-version: ${{ matrix.otp-version }}
+    
+    - name: Install Homebrew dependencies
+      run: |
+        brew install cmake openssl@3
+    
+    - name: Install rebar3
+      run: |
+        curl -fsSL -o rebar3 https://github.com/erlang/rebar3/releases/download/3.22.0/rebar3
+        chmod +x rebar3
+        sudo mv rebar3 /usr/local/bin/
+    
+    - name: Create test directories
+      run: |
+        mkdir -p tmp/ct_logs
+        mkdir -p tmp/cover
+        mkdir -p tmp/doc
+        mkdir -p tmp/perf
+        mkdir -p _build/default/lib/nif/priv
+        mkdir -p _build/test/lib/nif/priv
+    
+    - name: Build NIF
+      run: |
+        cd c_src
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release
+        make -j$(sysctl -n hw.ncpu)
+        cd ../..
+        cp priv/nif.dylib _build/default/lib/nif/priv/ || true
+        cp priv/nif.dylib _build/test/lib/nif/priv/ || true
+    
+    - name: Run tests
+      run: |
+        DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 ct --cover --verbose
+      env:
+        CT_OPTS: "--logdir=tmp/ct_logs --cover=tmp/ct_cover"
+    
+    - name: Generate coverage report
+      run: |
+        rebar3 cover --verbose
+      if: always()
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Erlang
+      uses: erlef/setup-beam@v1
+      with:
+        otp-version: 25
+    
+    - name: Install rebar3
+      run: |
+        curl -fsSL -o rebar3 https://github.com/erlang/rebar3/releases/download/3.22.0/rebar3
+        chmod +x rebar3
+        sudo mv rebar3 /usr/local/bin/
+    
+    - name: Run dialyzer
+      run: |
+        rebar3 dialyzer
+    
+    - name: Run xref
+      run: |
+        rebar3 xref 
