@@ -25,8 +25,6 @@ make test       # Run tests
 
 ## Installation & Usage
 
-<details id="erlang">
-
 ### Erlang
 
 ### Erlang Installation
@@ -45,10 +43,6 @@ ok = libsignal_protocol_nif:init(),
 {ok, Decrypted} = libsignal_protocol_nif:decrypt_message(Session, Encrypted).
 ```
 
-</details>
-
-<details id="elixir">
-
 ### Elixir
 
 ### Elixir Installation
@@ -66,10 +60,6 @@ ok = libsignal_protocol_nif:init(),
 {:ok, encrypted} = SignalProtocol.encrypt_message(session, "Hello!")
 {:ok, decrypted} = SignalProtocol.decrypt_message(session, encrypted)
 ```
-
-</details>
-
-<details id="gleam">
 
 ### Gleam
 
@@ -97,8 +87,6 @@ case libsignal_protocol_gleam.init() {
   Error(e) -> Error(e)
 }
 ```
-
-</details>
 
 ## Building
 
