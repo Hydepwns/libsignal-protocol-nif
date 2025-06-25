@@ -23,6 +23,7 @@ Cross-platform BEAM wrappers (Erlang/Elixir/Gleam) for the Signal Protocol libra
 git clone https://github.com/Hydepwns/libsignal-protocol-nif.git
 cd libsignal-protocol-nif
 make build      # Build everything
+make ci-build   # Build for CI
 make test       # Run tests
 make clean      # Clean build artifacts (optional)
 make clean-all  # Clean build artifacts and dependencies (optional)
