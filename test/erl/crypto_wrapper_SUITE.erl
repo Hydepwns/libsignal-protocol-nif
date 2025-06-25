@@ -175,13 +175,13 @@ test_random_bytes(_Config) ->
     ?assertNotEqual(Random1, Random2).
 
 test_crypto_error_handling(_Config) ->
-    % Test invalid inputs for sign - empty key should work (HMAC with empty key)
+    % Test invalid inputs for sign - empty key and short key should work (HMAC allows empty key)
     {ok, _} = signal_crypto:sign(<<>>, <<"data">>),
     {ok, _} = signal_crypto:sign(<<"short">>, <<"data">>),
 
-    % Test invalid inputs for verify - empty key should work
-    {ok, _} = signal_crypto:verify(<<>>, <<"data">>, <<"sig">>),
-    {ok, _} = signal_crypto:verify(<<"short">>, <<"data">>, <<"sig">>),
+    % Test invalid inputs for verify - both empty key and short key should fail
+    ?assertMatch({error, badarg}, signal_crypto:verify(<<>>, <<"data">>, <<"sig">>)),
+    ?assertMatch({error, badarg}, signal_crypto:verify(<<"short">>, <<"data">>, <<"sig">>)),
 
     % Test invalid inputs for encrypt - should fail with wrong key size
     ?assertMatch({error, _}, signal_crypto:encrypt(<<>>, <<"iv">>, <<"data">>)),
@@ -204,11 +204,11 @@ test_crypto_error_handling(_Config) ->
     {ok, _} = signal_crypto:hmac(<<>>, <<"data">>),
 
     % Test invalid inputs for hash - should fail with non-binary
-    ?assertMatch({error, _}, signal_crypto:hash(not_binary)),
+    ?assertMatch({error, badarg}, signal_crypto:hash(not_binary)),
 
-    % Test invalid inputs for random_bytes - should fail with invalid size
-    ?assertMatch({error, _}, signal_crypto:random_bytes(0)),
-    ?assertMatch({error, _}, signal_crypto:random_bytes(-1)).
+    % Test invalid inputs for random_bytes - zero size returns empty binary, negative size fails
+    {ok, <<>>} = signal_crypto:random_bytes(0),
+    ?assertMatch({error, badarg}, signal_crypto:random_bytes(-1)).
 
 test_crypto_concurrent_operations(_Config) ->
     % Test concurrent key generation

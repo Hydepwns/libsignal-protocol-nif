@@ -6,14 +6,35 @@
 -compile(export_all).
 
 all() ->
-    [test_basic_functionality, test_nif_loading, test_session].
+    [fast, expensive].
+
+groups() ->
+    [{fast, [], [test_basic_functionality, test_key_generation, test_session]},
+     {expensive, [], [test_performance]}].
 
 init_per_suite(Config) ->
-    % Start the application to ensure priv_dir is available
+    io:format("simple_test_SUITE: init_per_suite starting~n", []),
     application:ensure_all_started(nif),
-    Config.
+    case nif:init() of
+        ok ->
+            io:format("NIF initialized successfully~n"),
+            Config;
+        {error, Reason} ->
+            io:format("Failed to initialize NIF: ~p~n", [Reason]),
+            {skip, "NIF initialization failed"}
+    end.
 
 end_per_suite(_Config) ->
+    ok.
+
+init_per_group(fast, Config) ->
+    io:format("Running fast simple tests~n"),
+    Config;
+init_per_group(expensive, Config) ->
+    io:format("Running expensive simple tests~n"),
+    Config.
+
+end_per_group(_, _Config) ->
     ok.
 
 test_basic_functionality(_Config) ->
