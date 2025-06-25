@@ -21,19 +21,36 @@ Cross-platform BEAM wrappers (Erlang/Elixir/Gleam) for the Signal Protocol libra
 ```bash
 make build      # Build everything
 make test       # Run tests
+make clean      # Clean build artifacts (optional)
 ```
 
-## Installation & Usage
+## Installation & Usage (Erlang/Elixir/Gleam)
 
 ### Erlang
-
-### Erlang Installation
 
 ```erlang
 {deps, [{libsignal_protocol_nif, {git, "https://github.com/Hydepwns/libsignal-protocol-nif.git"}}]}.
 ```
 
-### Erlang Usage
+### Elixir
+
+```elixir
+mix deps.add libsignal_protocol_nif --git "https://github.com/Hydepwns/libsignal-protocol-nif.git"
+mix deps.get
+```
+
+```elixir
+{:libsignal_protocol_nif, git: "https://github.com/Hydepwns/libsignal-protocol-nif.git"}
+```
+
+### Gleam
+
+```toml
+[dependencies]
+libsignal_protocol_gleam = "~> 0.1.0"
+```
+
+## Usage
 
 ```erlang
 ok = libsignal_protocol_nif:init(),
@@ -43,16 +60,6 @@ ok = libsignal_protocol_nif:init(),
 {ok, Decrypted} = libsignal_protocol_nif:decrypt_message(Session, Encrypted).
 ```
 
-### Elixir
-
-### Elixir Installation
-
-```elixir
-{:libsignal_protocol_nif, "~> 0.1.0"}
-```
-
-### Elixir Usage
-
 ```elixir
 {:ok, pid} = SignalProtocol.start_link()
 {:ok, {Pub, Priv}} = SignalProtocol.generate_identity_key_pair()
@@ -60,17 +67,6 @@ ok = libsignal_protocol_nif:init(),
 {:ok, encrypted} = SignalProtocol.encrypt_message(session, "Hello!")
 {:ok, decrypted} = SignalProtocol.decrypt_message(session, encrypted)
 ```
-
-### Gleam
-
-### Gleam Installation
-
-```toml
-[dependencies]
-libsignal_protocol_gleam = "~> 0.1.0"
-```
-
-### Gleam Usage
 
 ```gleam
 case libsignal_protocol_gleam.init() {
@@ -162,7 +158,7 @@ The coverage report will be available in `_build/test/cover/index.html`.
 
 This script runs all test suites sequentially and accumulates coverage data, providing a comprehensive coverage report across all modules.
 
-## Usage
+## Advanced Usage (Erlang) (Optional)
 
 ```erlang
 % Initialize the NIF
