@@ -1,5 +1,5 @@
 import gleam/int
-import signal_protocol.{type PreKeyBundle, type Session, PreKeyBundle, Session}
+import signal_protocol.{type PreKeyBundle, type Session, Session}
 
 // --- FFI: Elixir.SignalProtocol.Session integration ---
 @external(erlang, "Elixir.SignalProtocol.Session", "create")

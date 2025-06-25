@@ -6,7 +6,8 @@
 
 %% @doc Create a new session
 new(LocalIdentityKey, RemoteIdentityKey) ->
-    {ok, SessionId} = signal_crypto:random_bytes(32),
+    % Generate deterministic session ID based on the input keys
+    SessionId = generate_deterministic_session_id(LocalIdentityKey, RemoteIdentityKey),
     #{id => SessionId,
       local_identity_key => LocalIdentityKey,
       remote_identity_key => RemoteIdentityKey,
@@ -16,6 +17,15 @@ new(LocalIdentityKey, RemoteIdentityKey) ->
       chain_key => undefined,
       message_keys => #{},
       message_counter => 0}.
+
+%% @doc Generate a deterministic session ID based on the input keys
+generate_deterministic_session_id(LocalIdentityKey, RemoteIdentityKey) ->
+    % Create a deterministic hash of the keys to ensure same keys = same session ID
+    KeyData = <<LocalIdentityKey/binary, RemoteIdentityKey/binary>>,
+    {ok, Hash} = signal_crypto:hash(KeyData),
+    % Use the first 32 bytes of the hash as the session ID
+    <<SessionId:32/binary, _/binary>> = Hash,
+    SessionId.
 
 %% @doc Process a pre-key bundle to establish a session
 process_pre_key_bundle(Session, Bundle) ->

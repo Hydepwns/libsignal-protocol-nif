@@ -5,6 +5,11 @@
 #include <openssl/sha.h>
 #include <openssl/ec.h>
 #include <string.h>
+#include <openssl/ecdsa.h>
+#include <openssl/err.h>
+#include <openssl/objects.h>
+#include <openssl/param_build.h>
+#include <openssl/core_names.h>
 
 // AES-256-GCM implementation
 crypto_error_t aes_gcm_encrypt(const aes_key_t *key,
@@ -319,7 +324,8 @@ crypto_error_t evp_generate_ec_keypair(EVP_PKEY **public_key, EVP_PKEY **private
         return CRYPTO_ERROR_INVALID_PARAMETER;
     }
 
-    EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, NULL);
+    // Create EVP_PKEY context for EC key generation using modern API
+    EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_from_name(NULL, "EC", NULL);
     if (!pctx)
     {
         return CRYPTO_ERROR_INTERNAL;
@@ -331,15 +337,15 @@ crypto_error_t evp_generate_ec_keypair(EVP_PKEY **public_key, EVP_PKEY **private
         return CRYPTO_ERROR_INTERNAL;
     }
 
-    // Set curve to P-256
-    if (EVP_PKEY_CTX_set_ec_paramgen_curve_nid(pctx, NID_X9_62_prime256v1) <= 0)
+    // Set curve to P-256 using modern API
+    if (EVP_PKEY_CTX_set_group_name(pctx, "P-256") <= 0)
     {
         EVP_PKEY_CTX_free(pctx);
         return CRYPTO_ERROR_INTERNAL;
     }
 
     EVP_PKEY *pkey = NULL;
-    if (EVP_PKEY_keygen(pctx, &pkey) <= 0)
+    if (EVP_PKEY_generate(pctx, &pkey) <= 0)
     {
         EVP_PKEY_CTX_free(pctx);
         return CRYPTO_ERROR_INTERNAL;
@@ -363,42 +369,88 @@ crypto_error_t evp_sign_data(EVP_PKEY *private_key, const uint8_t *data, size_t 
         return CRYPTO_ERROR_INVALID_PARAMETER;
     }
 
-    EVP_MD_CTX *md_ctx = EVP_MD_CTX_new();
-    if (!md_ctx)
-    {
-        return CRYPTO_ERROR_MEMORY;
-    }
+    int key_type = EVP_PKEY_id(private_key);
 
-    if (EVP_DigestSignInit(md_ctx, NULL, EVP_sha256(), NULL, private_key) <= 0)
+    if (key_type == EVP_PKEY_ED25519)
     {
+        // Use Ed25519 signing
+        EVP_MD_CTX *md_ctx = EVP_MD_CTX_new();
+        if (!md_ctx)
+        {
+            return CRYPTO_ERROR_MEMORY;
+        }
+
+        if (EVP_DigestSignInit(md_ctx, NULL, NULL, NULL, private_key) <= 0)
+        {
+            EVP_MD_CTX_free(md_ctx);
+            return CRYPTO_ERROR_INTERNAL;
+        }
+
+        // Get signature length
+        size_t sig_len = 0;
+        if (EVP_DigestSign(md_ctx, NULL, &sig_len, data, data_len) <= 0)
+        {
+            EVP_MD_CTX_free(md_ctx);
+            return CRYPTO_ERROR_INTERNAL;
+        }
+
+        if (sig_len > *signature_len)
+        {
+            EVP_MD_CTX_free(md_ctx);
+            return CRYPTO_ERROR_INVALID_PARAMETER;
+        }
+
+        // Generate signature
+        if (EVP_DigestSign(md_ctx, signature, &sig_len, data, data_len) <= 0)
+        {
+            EVP_MD_CTX_free(md_ctx);
+            return CRYPTO_ERROR_INTERNAL;
+        }
+
+        *signature_len = sig_len;
         EVP_MD_CTX_free(md_ctx);
-        return CRYPTO_ERROR_INTERNAL;
+        return CRYPTO_OK;
     }
-
-    // Get signature length
-    size_t sig_len = 0;
-    if (EVP_DigestSign(md_ctx, NULL, &sig_len, data, data_len) <= 0)
+    else
     {
-        EVP_MD_CTX_free(md_ctx);
-        return CRYPTO_ERROR_INTERNAL;
-    }
+        // Use ECDSA with SHA-256 for other key types
+        EVP_MD_CTX *md_ctx = EVP_MD_CTX_new();
+        if (!md_ctx)
+        {
+            return CRYPTO_ERROR_MEMORY;
+        }
 
-    if (sig_len > *signature_len)
-    {
-        EVP_MD_CTX_free(md_ctx);
-        return CRYPTO_ERROR_INVALID_PARAMETER;
-    }
+        if (EVP_DigestSignInit(md_ctx, NULL, EVP_sha256(), NULL, private_key) <= 0)
+        {
+            EVP_MD_CTX_free(md_ctx);
+            return CRYPTO_ERROR_INTERNAL;
+        }
 
-    // Generate signature
-    if (EVP_DigestSign(md_ctx, signature, &sig_len, data, data_len) <= 0)
-    {
-        EVP_MD_CTX_free(md_ctx);
-        return CRYPTO_ERROR_INTERNAL;
-    }
+        // Get signature length
+        size_t sig_len = 0;
+        if (EVP_DigestSign(md_ctx, NULL, &sig_len, data, data_len) <= 0)
+        {
+            EVP_MD_CTX_free(md_ctx);
+            return CRYPTO_ERROR_INTERNAL;
+        }
 
-    *signature_len = sig_len;
-    EVP_MD_CTX_free(md_ctx);
-    return CRYPTO_OK;
+        if (sig_len > *signature_len)
+        {
+            EVP_MD_CTX_free(md_ctx);
+            return CRYPTO_ERROR_INVALID_PARAMETER;
+        }
+
+        // Generate signature
+        if (EVP_DigestSign(md_ctx, signature, &sig_len, data, data_len) <= 0)
+        {
+            EVP_MD_CTX_free(md_ctx);
+            return CRYPTO_ERROR_INTERNAL;
+        }
+
+        *signature_len = sig_len;
+        EVP_MD_CTX_free(md_ctx);
+        return CRYPTO_OK;
+    }
 }
 
 crypto_error_t evp_verify_signature(EVP_PKEY *public_key, const uint8_t *data, size_t data_len,
@@ -434,49 +486,24 @@ crypto_error_t evp_serialize_public_key(EVP_PKEY *key, uint8_t *buffer, size_t *
         return CRYPTO_ERROR_INVALID_PARAMETER;
     }
 
-    // For EC keys, we need to serialize the point
-    EC_KEY *ec_key = EVP_PKEY_get1_EC_KEY(key);
-    if (!ec_key)
+    // Use EVP_PKEY_get_octet_string_param to get the public key in uncompressed format
+    size_t len = 0;
+    if (EVP_PKEY_get_octet_string_param(key, OSSL_PKEY_PARAM_PUB_KEY, NULL, 0, &len) != 1)
     {
-        return CRYPTO_ERROR_INTERNAL;
-    }
-
-    const EC_POINT *point = EC_KEY_get0_public_key(ec_key);
-    if (!point)
-    {
-        EC_KEY_free(ec_key);
-        return CRYPTO_ERROR_INTERNAL;
-    }
-
-    const EC_GROUP *group = EC_KEY_get0_group(ec_key);
-    if (!group)
-    {
-        EC_KEY_free(ec_key);
-        return CRYPTO_ERROR_INTERNAL;
-    }
-
-    // Get the size needed for uncompressed point
-    size_t len = EC_POINT_point2oct(group, point, POINT_CONVERSION_UNCOMPRESSED, NULL, 0, NULL);
-    if (len == 0)
-    {
-        EC_KEY_free(ec_key);
         return CRYPTO_ERROR_INTERNAL;
     }
 
     if (len > *buffer_len)
     {
-        EC_KEY_free(ec_key);
         return CRYPTO_ERROR_INVALID_PARAMETER;
     }
 
-    if (EC_POINT_point2oct(group, point, POINT_CONVERSION_UNCOMPRESSED, buffer, len, NULL) == 0)
+    if (EVP_PKEY_get_octet_string_param(key, OSSL_PKEY_PARAM_PUB_KEY, buffer, len, &len) != 1)
     {
-        EC_KEY_free(ec_key);
         return CRYPTO_ERROR_INTERNAL;
     }
 
     *buffer_len = len;
-    EC_KEY_free(ec_key);
     return CRYPTO_OK;
 }
 
@@ -487,74 +514,65 @@ crypto_error_t evp_deserialize_public_key(const uint8_t *buffer, size_t buffer_l
         return CRYPTO_ERROR_INVALID_PARAMETER;
     }
 
-    // Create EC group for P-256
-    EC_GROUP *group = EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
-    if (!group)
+    // Create EVP_PKEY context for EC key generation
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_name(NULL, "EC", NULL);
+    if (!ctx)
     {
         return CRYPTO_ERROR_INTERNAL;
     }
 
-    // Create EC point from buffer
-    EC_POINT *point = EC_POINT_new(group);
-    if (!point)
+    // Initialize key generation
+    if (EVP_PKEY_keygen_init(ctx) != 1)
     {
-        EC_GROUP_free(group);
+        EVP_PKEY_CTX_free(ctx);
         return CRYPTO_ERROR_INTERNAL;
     }
 
-    if (EC_POINT_oct2point(group, point, buffer, buffer_len, NULL) == 0)
+    // Set the curve to P-256
+    if (EVP_PKEY_CTX_set_group_name(ctx, "P-256") != 1)
     {
-        EC_POINT_free(point);
-        EC_GROUP_free(group);
+        EVP_PKEY_CTX_free(ctx);
         return CRYPTO_ERROR_INTERNAL;
     }
 
-    // Create EC key with the point
-    EC_KEY *ec_key = EC_KEY_new();
-    if (!ec_key)
+    // Create a temporary key to get the group
+    EVP_PKEY *temp_key = NULL;
+    if (EVP_PKEY_generate(ctx, &temp_key) != 1)
     {
-        EC_POINT_free(point);
-        EC_GROUP_free(group);
+        EVP_PKEY_CTX_free(ctx);
         return CRYPTO_ERROR_INTERNAL;
     }
 
-    if (EC_KEY_set_group(ec_key, group) == 0)
+    EVP_PKEY_CTX_free(ctx);
+
+    // Create new context for setting the public key
+    ctx = EVP_PKEY_CTX_new_from_pkey(NULL, temp_key, NULL);
+    EVP_PKEY_free(temp_key);
+
+    if (!ctx)
     {
-        EC_KEY_free(ec_key);
-        EC_POINT_free(point);
-        EC_GROUP_free(group);
         return CRYPTO_ERROR_INTERNAL;
     }
 
-    if (EC_KEY_set_public_key(ec_key, point) == 0)
+    // Set the public key from the buffer
+    if (EVP_PKEY_fromdata_init(ctx) != 1)
     {
-        EC_KEY_free(ec_key);
-        EC_POINT_free(point);
-        EC_GROUP_free(group);
+        EVP_PKEY_CTX_free(ctx);
         return CRYPTO_ERROR_INTERNAL;
     }
 
-    // Create EVP_PKEY from EC key
-    *key = EVP_PKEY_new();
-    if (!*key)
+    OSSL_PARAM params[] = {
+        OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, "P-256", 0),
+        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PUB_KEY, (void *)buffer, buffer_len),
+        OSSL_PARAM_END};
+
+    if (EVP_PKEY_fromdata(ctx, key, EVP_PKEY_PUBLIC_KEY, params) != 1)
     {
-        EC_KEY_free(ec_key);
-        EC_POINT_free(point);
-        EC_GROUP_free(group);
+        EVP_PKEY_CTX_free(ctx);
         return CRYPTO_ERROR_INTERNAL;
     }
 
-    if (EVP_PKEY_assign_EC_KEY(*key, ec_key) == 0)
-    {
-        EVP_PKEY_free(*key);
-        *key = NULL;
-        EC_POINT_free(point);
-        EC_GROUP_free(group);
-        return CRYPTO_ERROR_INTERNAL;
-    }
-
-    EC_POINT_free(point);
-    EC_GROUP_free(group);
+    EVP_PKEY_CTX_free(ctx);
     return CRYPTO_OK;
 }
 
@@ -565,42 +583,24 @@ crypto_error_t evp_serialize_private_key(EVP_PKEY *key, uint8_t *buffer, size_t 
         return CRYPTO_ERROR_INVALID_PARAMETER;
     }
 
-    // For EC private keys, we need to serialize the private key
-    EC_KEY *ec_key = EVP_PKEY_get1_EC_KEY(key);
-    if (!ec_key)
+    // Use EVP_PKEY_get_octet_string_param to get the private key
+    size_t len = 0;
+    if (EVP_PKEY_get_octet_string_param(key, OSSL_PKEY_PARAM_PRIV_KEY, NULL, 0, &len) != 1)
     {
-        return CRYPTO_ERROR_INTERNAL;
-    }
-
-    const BIGNUM *priv = EC_KEY_get0_private_key(ec_key);
-    if (!priv)
-    {
-        EC_KEY_free(ec_key);
-        return CRYPTO_ERROR_INTERNAL;
-    }
-
-    // Get the size needed for the private key
-    size_t len = BN_num_bytes(priv);
-    if (len == 0)
-    {
-        EC_KEY_free(ec_key);
         return CRYPTO_ERROR_INTERNAL;
     }
 
     if (len > *buffer_len)
     {
-        EC_KEY_free(ec_key);
         return CRYPTO_ERROR_INVALID_PARAMETER;
     }
 
-    if (BN_bn2bin(priv, buffer) != len)
+    if (EVP_PKEY_get_octet_string_param(key, OSSL_PKEY_PARAM_PRIV_KEY, buffer, len, &len) != 1)
     {
-        EC_KEY_free(ec_key);
         return CRYPTO_ERROR_INTERNAL;
     }
 
     *buffer_len = len;
-    EC_KEY_free(ec_key);
     return CRYPTO_OK;
 }
 
@@ -611,76 +611,65 @@ crypto_error_t evp_deserialize_private_key(const uint8_t *buffer, size_t buffer_
         return CRYPTO_ERROR_INVALID_PARAMETER;
     }
 
-    // Create EC group for P-256
-    EC_GROUP *group = EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1);
-    if (!group)
+    // Create EVP_PKEY context for EC key generation
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new_from_name(NULL, "EC", NULL);
+    if (!ctx)
     {
         return CRYPTO_ERROR_INTERNAL;
     }
 
-    // Create BIGNUM from buffer
-    BIGNUM *priv = BN_bin2bn(buffer, buffer_len, NULL);
-    if (!priv)
+    // Initialize key generation
+    if (EVP_PKEY_keygen_init(ctx) != 1)
     {
-        EC_GROUP_free(group);
+        EVP_PKEY_CTX_free(ctx);
         return CRYPTO_ERROR_INTERNAL;
     }
 
-    // Create EC key with the private key
-    EC_KEY *ec_key = EC_KEY_new();
-    if (!ec_key)
+    // Set the curve to P-256
+    if (EVP_PKEY_CTX_set_group_name(ctx, "P-256") != 1)
     {
-        BN_free(priv);
-        EC_GROUP_free(group);
+        EVP_PKEY_CTX_free(ctx);
         return CRYPTO_ERROR_INTERNAL;
     }
 
-    if (EC_KEY_set_group(ec_key, group) == 0)
+    // Create a temporary key to get the group
+    EVP_PKEY *temp_key = NULL;
+    if (EVP_PKEY_generate(ctx, &temp_key) != 1)
     {
-        EC_KEY_free(ec_key);
-        BN_free(priv);
-        EC_GROUP_free(group);
+        EVP_PKEY_CTX_free(ctx);
         return CRYPTO_ERROR_INTERNAL;
     }
 
-    if (EC_KEY_set_private_key(ec_key, priv) == 0)
+    EVP_PKEY_CTX_free(ctx);
+
+    // Create new context for setting the private key
+    ctx = EVP_PKEY_CTX_new_from_pkey(NULL, temp_key, NULL);
+    EVP_PKEY_free(temp_key);
+
+    if (!ctx)
     {
-        EC_KEY_free(ec_key);
-        BN_free(priv);
-        EC_GROUP_free(group);
         return CRYPTO_ERROR_INTERNAL;
     }
 
-    // Compute public key from private key
-    if (EC_KEY_generate_key(ec_key) == 0)
+    // Set the private key from the buffer
+    if (EVP_PKEY_fromdata_init(ctx) != 1)
     {
-        EC_KEY_free(ec_key);
-        BN_free(priv);
-        EC_GROUP_free(group);
+        EVP_PKEY_CTX_free(ctx);
         return CRYPTO_ERROR_INTERNAL;
     }
 
-    // Create EVP_PKEY from EC key
-    *key = EVP_PKEY_new();
-    if (!*key)
+    OSSL_PARAM params[] = {
+        OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, "P-256", 0),
+        OSSL_PARAM_octet_string(OSSL_PKEY_PARAM_PRIV_KEY, (void *)buffer, buffer_len),
+        OSSL_PARAM_END};
+
+    if (EVP_PKEY_fromdata(ctx, key, EVP_PKEY_KEYPAIR, params) != 1)
     {
-        EC_KEY_free(ec_key);
-        BN_free(priv);
-        EC_GROUP_free(group);
+        EVP_PKEY_CTX_free(ctx);
         return CRYPTO_ERROR_INTERNAL;
     }
 
-    if (EVP_PKEY_assign_EC_KEY(*key, ec_key) == 0)
-    {
-        EVP_PKEY_free(*key);
-        *key = NULL;
-        BN_free(priv);
-        EC_GROUP_free(group);
-        return CRYPTO_ERROR_INTERNAL;
-    }
-
-    BN_free(priv);
-    EC_GROUP_free(group);
+    EVP_PKEY_CTX_free(ctx);
     return CRYPTO_OK;
 }
 
