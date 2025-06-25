@@ -26,7 +26,7 @@ else
 endif
 
 # Build targets
-.PHONY: all clean test test-clean deps install perf-test perf-monitor docker-build docker-test release dev-setup dev-test monitor-memory monitor-cache help
+.PHONY: all clean test test-clean deps install perf-test perf-monitor docker-build docker-test release dev-setup dev-test monitor-memory monitor-cache help ci-build ci-test
 
 # Default target
 all: build
@@ -41,6 +41,15 @@ build: $(BUILD_DIR)
 	mkdir -p _build/test/lib/nif/priv
 	cp priv/nif.dylib _build/default/lib/nif/priv/ || true
 	cp priv/nif.dylib _build/test/lib/nif/priv/ || true
+
+# CI-specific build target
+ci-build: $(BUILD_DIR)
+	cd $(BUILD_DIR) && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j$(shell nproc 2>/dev/null || echo 1)
+	# Copy NIF to only the correct test and default profile priv directories
+	mkdir -p _build/default/lib/nif/priv
+	mkdir -p _build/test/lib/nif/priv
+	cp priv/nif.so _build/default/lib/nif/priv/ || true
+	cp priv/nif.so _build/test/lib/nif/priv/ || true
 
 # Clean build artifacts
 clean:
@@ -146,6 +155,10 @@ monitor-cache:
 	@echo "Monitoring cache performance..."
 	erl -noshell -pa ebin -eval "performance_test:benchmark_cache_performance(1000), halt()."
 
+# CI-specific test target
+ci-test: test-dirs
+	rebar3 ct --cover --verbose
+
 # Help target
 help:
 	@echo "Available targets:"
@@ -170,4 +183,6 @@ help:
 	@echo "  dev-test       - Run all development tests"
 	@echo "  monitor-memory - Monitor memory usage"
 	@echo "  monitor-cache  - Monitor cache performance"
+	@echo "  ci-build       - Build for CI"
+	@echo "  ci-test        - Run CI tests"
 	@echo "  help           - Show this help message" 

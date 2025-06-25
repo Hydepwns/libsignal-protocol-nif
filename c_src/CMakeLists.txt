@@ -5,11 +5,24 @@ project(nif C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Set OpenSSL paths explicitly for Homebrew on Apple Silicon
+# Platform-specific OpenSSL configuration
 if(APPLE)
+    # macOS - handle both Intel and Apple Silicon
     set(OPENSSL_ROOT_DIR "/opt/homebrew/opt/openssl@3")
     set(OPENSSL_INCLUDE_DIR "${OPENSSL_ROOT_DIR}/include")
     set(OPENSSL_LIBRARIES "${OPENSSL_ROOT_DIR}/lib/libcrypto.a;${OPENSSL_ROOT_DIR}/lib/libssl.a")
+    include_directories(/opt/homebrew/opt/openssl@3/include)
+elseif(UNIX AND NOT APPLE)
+    # Linux - use system OpenSSL
+    set(OPENSSL_ROOT_DIR "/usr")
+    set(OPENSSL_INCLUDE_DIR "/usr/include/openssl")
+    set(OPENSSL_LIBRARIES "crypto;ssl")
+    include_directories(/usr/include/openssl)
+elseif(WIN32)
+    # Windows - use system OpenSSL
+    set(OPENSSL_ROOT_DIR "C:/OpenSSL-Win64")
+    set(OPENSSL_INCLUDE_DIR "${OPENSSL_ROOT_DIR}/include")
+    set(OPENSSL_LIBRARIES "${OPENSSL_ROOT_DIR}/lib/libcrypto.lib;${OPENSSL_ROOT_DIR}/lib/libssl.lib")
 endif()
 
 # Find required packages
@@ -48,9 +61,6 @@ if(NOT EXISTS "${ERLANG_LIB_DIR}")
 endif()
 
 # Add include directories
-if(APPLE)
-    include_directories(/opt/homebrew/opt/openssl@3/include)
-endif()
 include_directories(${OPENSSL_INCLUDE_DIRS} ${ERLANG_INCLUDE_DIR})
 
 # Add source files - only build the main NIF implementation
