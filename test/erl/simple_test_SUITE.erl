@@ -6,7 +6,7 @@
 -compile(export_all).
 
 all() ->
-    [fast, expensive].
+    [{group, fast}, {group, expensive}].
 
 groups() ->
     [{fast, [], [test_basic_functionality, test_key_generation, test_session]},
@@ -44,6 +44,20 @@ test_basic_functionality(_Config) ->
     ?assert(is_binary(<<"test">>)),
     io:format("Basic test passed~n").
 
+test_key_generation(_Config) ->
+    % Test key generation functionality
+    io:format("Testing key generation...~n"),
+    case signal_crypto:generate_key_pair() of
+        {ok, {PublicKey, PrivateKey}} ->
+            io:format("Key generation successful~n"),
+            ?assert(is_binary(PublicKey)),
+            ?assert(is_binary(PrivateKey)),
+            ?assertNotEqual(PublicKey, PrivateKey);
+        {error, Reason} ->
+            io:format("Key generation failed: ~p~n", [Reason]),
+            ?assert(false, "Key generation failed")
+    end.
+
 test_nif_loading(_Config) ->
     % Test if we can load the NIF
     io:format("Testing NIF loading...~n"),
@@ -80,3 +94,15 @@ test_session(_Config) ->
     ?assert(is_binary(signal_session:get_session_id(Session))),
     ?assertEqual(LocalPublic, maps:get(local_identity_key, Session)),
     ?assertEqual(RemotePublic, maps:get(remote_identity_key, Session)).
+
+test_performance(_Config) ->
+    % Test performance with multiple key generations
+    io:format("Testing performance...~n"),
+    StartTime = erlang:monotonic_time(millisecond),
+    lists:foreach(fun(_) ->
+        {ok, {_, _}} = signal_crypto:generate_key_pair()
+    end, lists:seq(1, 10)),
+    EndTime = erlang:monotonic_time(millisecond),
+    Duration = EndTime - StartTime,
+    io:format("Generated 10 key pairs in ~p ms~n", [Duration]),
+    ?assert(Duration < 1000, "Performance test took too long").
