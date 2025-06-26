@@ -34,38 +34,65 @@ all: build
 PRIV_DIR = priv
 BUILD_DIR = c_src/build
 
-build: $(BUILD_DIR)
-	cd $(BUILD_DIR) && cmake .. && make
+# Guard clause to check we're in the correct directory
+check-project-root:
+	@if [ ! -f "Makefile" ] || [ ! -f "c_src/CMakeLists.txt" ]; then \
+		echo "ERROR: This command must be run from the project root directory."; \
+		echo "Current directory: $$(pwd)"; \
+		echo "Expected files: Makefile, c_src/CMakeLists.txt"; \
+		echo "Please navigate to the project root directory and try again."; \
+		exit 1; \
+	fi
+	@if [ -d "c_src/build/c_src" ]; then \
+		echo "WARNING: Detected nested build directory structure!"; \
+		echo "This indicates a previous build issue. Cleaning up..."; \
+		rm -rf c_src/build; \
+		echo "Cleanup complete. Please run 'make build' again."; \
+		exit 1; \
+	fi
+
+build: check-project-root $(BUILD_DIR)
+	@echo "Building Signal Protocol NIF..."
+	cd c_src && cmake . && make
 	# Copy NIF to all relevant test and default profile priv directories
 	mkdir -p _build/default/lib/nif/priv
 	mkdir -p _build/test/lib/nif/priv
 	mkdir -p _build/unit+test/lib/nif/priv
-	cp priv/nif.dylib _build/default/lib/nif/priv/ || true
-	cp priv/nif.dylib _build/test/lib/nif/priv/ || true
-	cp priv/nif.dylib _build/unit+test/lib/nif/priv/ || true
+	cp priv/signal_nif.dylib _build/default/lib/nif/priv/ || true
+	cp priv/signal_nif.dylib _build/test/lib/nif/priv/ || true
+	cp priv/signal_nif.dylib _build/unit+test/lib/nif/priv/ || true
+	@echo "Build completed successfully!"
 
 # CI-specific build target
-ci-build: $(BUILD_DIR)
-	cd $(BUILD_DIR) && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j$(shell nproc 2>/dev/null || echo 1)
+ci-build: check-project-root $(BUILD_DIR)
+	@echo "Building for CI environment..."
+	cd c_src && cmake . -DCMAKE_BUILD_TYPE=Release && make -j$(shell nproc 2>/dev/null || echo 1)
 	# Copy NIF to only the correct test and default profile priv directories
 	mkdir -p _build/default/lib/nif/priv
 	mkdir -p _build/test/lib/nif/priv
-	cp priv/nif.so _build/default/lib/nif/priv/ || true
-	cp priv/nif.so _build/test/lib/nif/priv/ || true
+	cp priv/signal_nif.so _build/default/lib/nif/priv/ || true
+	cp priv/signal_nif.so _build/test/lib/nif/priv/ || true
+	@echo "CI build completed successfully!"
 
 # Clean build artifacts
-clean:
+clean: check-project-root
+	@echo "Cleaning build artifacts..."
 	rm -rf $(BUILD_DIR)
 	rm -rf priv/*.so priv/*.dylib priv/*.dll
+	@echo "Cleanup completed!"
 
 # Clean test artifacts
-test-clean:
+test-clean: check-project-root
+	@echo "Cleaning test artifacts..."
 	rm -rf tmp/
 	rm -f *.log *.html *.xml *.cover
+	@echo "Test cleanup completed!"
 
 # Create build directory
-$(BUILD_DIR):
+$(BUILD_DIR): check-project-root
+	@echo "Creating build directory..."
 	mkdir -p $(BUILD_DIR)
+	@echo "Build directory created: $(BUILD_DIR)"
 
 # Create test directories
 test-dirs:
@@ -190,6 +217,7 @@ help:
 	@echo "  build              - Build all components"
 	@echo "  clean              - Clean all build artifacts"
 	@echo "  test-clean         - Clean all test artifacts"
+	@echo "  diagnose           - Diagnose and fix directory issues"
 	@echo "  test               - Run all tests"
 	@echo "  test-unit          - Run unit tests only"
 	@echo "  test-integration   - Run integration tests only"
@@ -215,4 +243,39 @@ help:
 	@echo "  monitor-cache      - Monitor cache performance"
 	@echo "  ci-build           - Build for CI"
 	@echo "  ci-test            - Run CI tests"
-	@echo "  help               - Show this help message" 
+	@echo "  help               - Show this help message"
+
+# Diagnose and fix directory issues
+diagnose:
+	@echo "=== Directory Diagnosis ==="
+	@echo "Current directory: $$(pwd)"
+	@echo ""
+	@echo "Checking for required files:"
+	@if [ -f "Makefile" ]; then echo "✓ Makefile found"; else echo "✗ Makefile missing"; fi
+	@if [ -f "c_src/CMakeLists.txt" ]; then echo "✓ c_src/CMakeLists.txt found"; else echo "✗ c_src/CMakeLists.txt missing"; fi
+	@echo ""
+	@echo "Checking for build directory issues:"
+	@if [ -d "c_src/build" ]; then \
+		echo "✓ c_src/build exists"; \
+		if [ -d "c_src/build/c_src" ]; then \
+			echo "✗ WARNING: Nested build directory detected!"; \
+			echo "  This indicates a previous build issue."; \
+		else \
+			echo "✓ Build directory structure looks correct"; \
+		fi; \
+	else \
+		echo "✓ No build directory (this is normal for fresh builds)"; \
+	fi
+	@echo ""
+	@echo "Checking for nested directories:"
+	@find . -name "build" -type d 2>/dev/null | head -10
+	@echo ""
+	@echo "=== Recommendations ==="
+	@if [ ! -f "Makefile" ] || [ ! -f "c_src/CMakeLists.txt" ]; then \
+		echo "❌ You are not in the project root directory."; \
+		echo "   Navigate to the directory containing Makefile and c_src/CMakeLists.txt"; \
+	elif [ -d "c_src/build/c_src" ]; then \
+		echo "❌ Nested build directory detected. Run: make clean"; \
+	else \
+		echo "✅ Directory structure looks good. You can run: make build"; \
+	fi 

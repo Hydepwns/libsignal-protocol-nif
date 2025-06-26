@@ -1,22 +1,31 @@
 -module(signal_session).
 
--export([new/2, process_pre_key_bundle/2, encrypt/2, decrypt/2, get_session_id/1, calculate_shared_secret/2]).
+-export([
+    new/2,
+    process_pre_key_bundle/2,
+    encrypt/2,
+    decrypt/2,
+    get_session_id/1,
+    calculate_shared_secret/2
+]).
 
--include_lib("erl_src/include/signal_types.hrl").
+-include("include/signal_types.hrl").
 
 %% @doc Create a new session
 new(LocalIdentityKey, RemoteIdentityKey) ->
     % Generate deterministic session ID based on the input keys
     SessionId = generate_deterministic_session_id(LocalIdentityKey, RemoteIdentityKey),
-    #{id => SessionId,
-      local_identity_key => LocalIdentityKey,
-      remote_identity_key => RemoteIdentityKey,
-      pre_key_id => undefined,
-      signed_pre_key_id => undefined,
-      ephemeral_key => undefined,
-      chain_key => undefined,
-      message_keys => #{},
-      message_counter => 0}.
+    #{
+        id => SessionId,
+        local_identity_key => LocalIdentityKey,
+        remote_identity_key => RemoteIdentityKey,
+        pre_key_id => undefined,
+        signed_pre_key_id => undefined,
+        ephemeral_key => undefined,
+        chain_key => undefined,
+        message_keys => #{},
+        message_counter => 0
+    }.
 
 %% @doc Generate a deterministic session ID based on the input keys
 generate_deterministic_session_id(LocalIdentityKey, RemoteIdentityKey) ->
@@ -30,15 +39,15 @@ generate_deterministic_session_id(LocalIdentityKey, RemoteIdentityKey) ->
 %% @doc Process a pre-key bundle to establish a session
 process_pre_key_bundle(Session, Bundle) ->
     io:format("process_pre_key_bundle: starting with Bundle ~p~n", [Bundle]),
-    {RegistrationId,
-     DeviceId,
-     {PreKeyId, PreKeyPublic},
-     {SignedPreKeyId, SignedPreKeyPublic, Signature},
-     IdentityKey} =
+    {RegistrationId, DeviceId, {PreKeyId, PreKeyPublic},
+        {SignedPreKeyId, SignedPreKeyPublic, Signature},
+        IdentityKey} =
         Bundle,
 
     % Write signature verification inputs to file
-    SigDebug = io_lib:format("IdentityKey: ~p~nSignedPreKeyPublic: ~p~nSignature: ~p~n", [IdentityKey, SignedPreKeyPublic, Signature]),
+    SigDebug = io_lib:format("IdentityKey: ~p~nSignedPreKeyPublic: ~p~nSignature: ~p~n", [
+        IdentityKey, SignedPreKeyPublic, Signature
+    ]),
     file:write_file("/tmp/signal_signature_debug.log", SigDebug),
 
     % Verify the signature before proceeding
@@ -48,56 +57,68 @@ process_pre_key_bundle(Session, Bundle) ->
             {ok, {_LocalIdentityPublic, LocalIdentityPrivate}} = signal_crypto:generate_ed25519_key_pair(),
             {ok, {_LocalPreKeyPublic, LocalPreKeyPrivate}} = signal_crypto:generate_curve25519_key_pair(),
             {ok, {_LocalSignedPreKeyPublic, LocalSignedPreKeyPrivate}} = signal_crypto:generate_curve25519_key_pair(),
-            
+
             % Calculate shared secrets using proper ECDH key exchange
             % Each party uses their private key with the other party's public key
             PreKeySecret = calculate_shared_secret(LocalPreKeyPrivate, PreKeyPublic),
-            SignedPreKeySecret = calculate_shared_secret(LocalSignedPreKeyPrivate, SignedPreKeyPublic),
+            SignedPreKeySecret = calculate_shared_secret(
+                LocalSignedPreKeyPrivate, SignedPreKeyPublic
+            ),
             IdentitySecret = calculate_shared_secret(LocalIdentityPrivate, IdentityKey),
-            
+
             % Derive master secret and chain key
             MasterSecret = derive_master_secret(PreKeySecret, SignedPreKeySecret, IdentitySecret),
             ChainKey = derive_chain_key(MasterSecret),
-            
+
             EncodedPreKeyPublic = encode_bin(PreKeyPublic),
             EncodedSignedPreKeyPublic = encode_bin(SignedPreKeyPublic),
             EncodedIdentityKey = encode_bin(IdentityKey),
 
             % Convert bundle tuple to binary format expected by NIF
             BundleBinary =
-                <<RegistrationId:32,
-                  DeviceId:32,
-                  PreKeyId:32,
-                  EncodedPreKeyPublic/binary,
-                  SignedPreKeyId:32,
-                  EncodedSignedPreKeyPublic/binary,
-                  EncodedIdentityKey/binary>>,
+                <<RegistrationId:32, DeviceId:32, PreKeyId:32, EncodedPreKeyPublic/binary,
+                    SignedPreKeyId:32, EncodedSignedPreKeyPublic/binary,
+                    EncodedIdentityKey/binary>>,
 
             % Create a dummy binary session for the NIF (it doesn't actually use the session parameter)
-            DummySession = <<0:1024>>, % 1KB of zeros as placeholder
+
+            % 1KB of zeros as placeholder
+            DummySession = <<0:1024>>,
 
             % Write debug info to file
-            DebugInfo = io_lib:format("DummySession size: ~p~nDummySession (hex): ~s~nBundleBinary size: ~p~nBundleBinary (hex): ~s~n",
-                                      [byte_size(DummySession),
-                                       string:join([io_lib:format("~2.16.0B", [X]) || <<X:8>> <= DummySession], " "),
-                                       byte_size(BundleBinary),
-                                       string:join([io_lib:format("~2.16.0B", [X]) || <<X:8>> <= BundleBinary], " ")]),
+            DebugInfo = io_lib:format(
+                "DummySession size: ~p~nDummySession (hex): ~s~nBundleBinary size: ~p~nBundleBinary (hex): ~s~n",
+                [
+                    byte_size(DummySession),
+                    string:join([io_lib:format("~2.16.0B", [X]) || <<X:8>> <= DummySession], " "),
+                    byte_size(BundleBinary),
+                    string:join([io_lib:format("~2.16.0B", [X]) || <<X:8>> <= BundleBinary], " ")
+                ]
+            ),
             file:write_file("/tmp/signal_debug_binaries.log", DebugInfo),
 
-            io:format("process_pre_key_bundle: calling nif:process_pre_key_bundle with BundleBinary=~p (~p bytes)~n",
-                      [BundleBinary, byte_size(BundleBinary)]),
+            io:format(
+                "process_pre_key_bundle: calling nif:process_pre_key_bundle with BundleBinary=~p (~p bytes)~n",
+                [BundleBinary, byte_size(BundleBinary)]
+            ),
             case nif:process_pre_key_bundle(DummySession, BundleBinary) of
                 {ok, SessionBinary} ->
-                    io:format("process_pre_key_bundle: NIF returned SessionBinary=~p (~p bytes)~n",
-                              [SessionBinary, byte_size(SessionBinary)]),
+                    io:format(
+                        "process_pre_key_bundle: NIF returned SessionBinary=~p (~p bytes)~n",
+                        [SessionBinary, byte_size(SessionBinary)]
+                    ),
                     % The NIF returns a binary containing the session state
                     % We need to extract the relevant fields from the binary
                     % For now, we'll create a minimal session update
                     UpdatedSession =
-                        Session#{pre_key_id => PreKeyId,
-                                 signed_pre_key_id => SignedPreKeyId,
-                                 ephemeral_key => PreKeyPublic, % Use pre-key as ephemeral for now
-                                 chain_key => ChainKey}, % Use calculated chain key
+                        Session#{
+                            pre_key_id => PreKeyId,
+                            signed_pre_key_id => SignedPreKeyId,
+                            % Use pre-key as ephemeral for now
+                            ephemeral_key => PreKeyPublic,
+                            % Use calculated chain key
+                            chain_key => ChainKey
+                        },
                     io:format("process_pre_key_bundle: UpdatedSession=~p~n", [UpdatedSession]),
                     {ok, UpdatedSession};
                 {error, Reason} ->
@@ -112,37 +133,51 @@ process_pre_key_bundle(Session, Bundle) ->
 %% @doc Encrypt a message using the session
 encrypt(Session, Message) ->
     try
-        io:format("signal_session:encrypt: Session=~p, Message=~p (~p bytes)~n",
-                  [Session, Message, byte_size(Message)]),
+        io:format(
+            "signal_session:encrypt: Session=~p, Message=~p (~p bytes)~n",
+            [Session, Message, byte_size(Message)]
+        ),
         ChainKey = maps:get(chain_key, Session),
         MessageKeys = maps:get(message_keys, Session, #{}),
         MessageCounter = maps:get(message_counter, Session, 0),
-        io:format("signal_session:encrypt: ChainKey=~p (~p bytes), MessageKeys=~p, MessageCounter=~p~n",
-                  [ChainKey, byte_size(ChainKey), MessageKeys, MessageCounter]),
+        io:format(
+            "signal_session:encrypt: ChainKey=~p (~p bytes), MessageKeys=~p, MessageCounter=~p~n",
+            [ChainKey, byte_size(ChainKey), MessageKeys, MessageCounter]
+        ),
 
         % Generate new message key
         {NewChainKey, MessageKey} = derive_message_key(ChainKey),
-        io:format("signal_session:encrypt: NewChainKey=~p (~p bytes), MessageKey=~p (~p bytes)~n",
-                  [NewChainKey, byte_size(NewChainKey), MessageKey, byte_size(MessageKey)]),
+        io:format(
+            "signal_session:encrypt: NewChainKey=~p (~p bytes), MessageKey=~p (~p bytes)~n",
+            [NewChainKey, byte_size(NewChainKey), MessageKey, byte_size(MessageKey)]
+        ),
 
         % Encrypt the message
         {ok, IV} = signal_crypto:random_bytes(12),
 
         % Debug print to file
         ok =
-            file:write_file("/tmp/signal_crypto_debug.log",
-                            io_lib:format("Encrypting:~n  MessageKey: ~p (~p bytes)~n  IV: ~p (~p bytes)~n  Message: ~p (~p bytes)~n",
-                                          [MessageKey,
-                                           byte_size(MessageKey),
-                                           IV,
-                                           byte_size(IV),
-                                           Message,
-                                           byte_size(Message)]),
-                            [append]),
+            file:write_file(
+                "/tmp/signal_crypto_debug.log",
+                io_lib:format(
+                    "Encrypting:~n  MessageKey: ~p (~p bytes)~n  IV: ~p (~p bytes)~n  Message: ~p (~p bytes)~n",
+                    [
+                        MessageKey,
+                        byte_size(MessageKey),
+                        IV,
+                        byte_size(IV),
+                        Message,
+                        byte_size(Message)
+                    ]
+                ),
+                [append]
+            ),
 
         {ok, CiphertextWithTag} = signal_crypto:encrypt(MessageKey, IV, Message),
-        io:format("signal_session:encrypt: CiphertextWithTag=~p (~p bytes)~n",
-                  [CiphertextWithTag, byte_size(CiphertextWithTag)]),
+        io:format(
+            "signal_session:encrypt: CiphertextWithTag=~p (~p bytes)~n",
+            [CiphertextWithTag, byte_size(CiphertextWithTag)]
+        ),
 
         % Create message header
         Header = create_message_header(Session),
@@ -150,17 +185,25 @@ encrypt(Session, Message) ->
 
         % Update session
         UpdatedSession =
-            Session#{chain_key := NewChainKey,
-                     message_keys := maps:put(MessageCounter, MessageKey, MessageKeys),
-                     message_counter := MessageCounter + 1},
-        io:format("signal_session:encrypt: UpdatedSession message_keys=~p, message_counter=~p~n",
-                  [maps:get(message_keys, UpdatedSession),
-                   maps:get(message_counter, UpdatedSession)]),
+            Session#{
+                chain_key := NewChainKey,
+                message_keys := maps:put(MessageCounter, MessageKey, MessageKeys),
+                message_counter := MessageCounter + 1
+            },
+        io:format(
+            "signal_session:encrypt: UpdatedSession message_keys=~p, message_counter=~p~n",
+            [
+                maps:get(message_keys, UpdatedSession),
+                maps:get(message_counter, UpdatedSession)
+            ]
+        ),
 
         % Combine header, IV, and ciphertext+tag
         EncryptedMessage = <<Header/binary, IV/binary, CiphertextWithTag/binary>>,
-        io:format("signal_session:encrypt: EncryptedMessage=~p (~p bytes)~n",
-                  [EncryptedMessage, byte_size(EncryptedMessage)]),
+        io:format(
+            "signal_session:encrypt: EncryptedMessage=~p (~p bytes)~n",
+            [EncryptedMessage, byte_size(EncryptedMessage)]
+        ),
 
         {ok, EncryptedMessage, UpdatedSession}
     catch
@@ -175,8 +218,9 @@ decrypt(Session, Ciphertext) ->
         % Calculate header size based on ephemeral key size
         EphemeralKey = maps:get(ephemeral_key, Session),
         HeaderSize =
-            8
-            + byte_size(EphemeralKey), % 4 bytes for PreKeyId + 4 bytes for SignedPreKeyId + ephemeral key size
+            8 +
+                % 4 bytes for PreKeyId + 4 bytes for SignedPreKeyId + ephemeral key size
+                byte_size(EphemeralKey),
 
         % Extract message components
         <<Header:HeaderSize/binary, IV:12/binary, CiphertextWithTag/binary>> = Ciphertext,
@@ -190,31 +234,41 @@ decrypt(Session, Ciphertext) ->
                 % we need to use (counter - 1) to get the key that was used
                 MessageCounter = maps:get(message_counter, Session, 0),
                 MessageKeys = maps:get(message_keys, Session, #{}),
-                io:format("signal_session:decrypt: MessageCounter=~p, MessageKeys=~p~n",
-                          [MessageCounter, MessageKeys]),
+                io:format(
+                    "signal_session:decrypt: MessageCounter=~p, MessageKeys=~p~n",
+                    [MessageCounter, MessageKeys]
+                ),
 
                 % Get the message key that was used for encryption
                 case maps:get(MessageCounter - 1, MessageKeys, undefined) of
                     undefined ->
-                        io:format("signal_session:decrypt: message key not found at counter ~p~n",
-                                  [MessageCounter - 1]),
+                        io:format(
+                            "signal_session:decrypt: message key not found at counter ~p~n",
+                            [MessageCounter - 1]
+                        ),
                         {error, message_key_not_found};
                     MessageKey ->
-                        io:format("signal_session:decrypt: using MessageKey=~p (~p bytes), IV=~p (~p bytes), CiphertextWithTag=~p (~p bytes)~n",
-                                  [MessageKey,
-                                   byte_size(MessageKey),
-                                   IV,
-                                   byte_size(IV),
-                                   CiphertextWithTag,
-                                   byte_size(CiphertextWithTag)]),
+                        io:format(
+                            "signal_session:decrypt: using MessageKey=~p (~p bytes), IV=~p (~p bytes), CiphertextWithTag=~p (~p bytes)~n",
+                            [
+                                MessageKey,
+                                byte_size(MessageKey),
+                                IV,
+                                byte_size(IV),
+                                CiphertextWithTag,
+                                byte_size(CiphertextWithTag)
+                            ]
+                        ),
                         % Decrypt the message (CiphertextWithTag already includes the tag)
                         {ok, Message} = signal_crypto:decrypt(MessageKey, IV, CiphertextWithTag),
 
                         % Update session - remove the used message key and increment counter
                         UpdatedMessageKeys = maps:remove(MessageCounter - 1, MessageKeys),
                         UpdatedSession =
-                            Session#{message_keys := UpdatedMessageKeys,
-                                     message_counter := MessageCounter + 1},
+                            Session#{
+                                message_keys := UpdatedMessageKeys,
+                                message_counter := MessageCounter + 1
+                            },
 
                         {ok, Message, UpdatedSession}
                 end;
@@ -233,15 +287,30 @@ get_session_id(#{id := Id}) ->
 %% Private functions
 
 verify_bundle_signature(IdentityKey, SignedPreKeyPublic, Signature) ->
-    file:write_file("/tmp/signal_crypto_debug.log",
-        io_lib:format("verify_bundle_signature: IdentityKey ~p (~p bytes), SignedPreKeyPublic ~p (~p bytes)\n",
-            [IdentityKey, byte_size(IdentityKey), SignedPreKeyPublic, byte_size(SignedPreKeyPublic)]), [append]),
-    file:write_file("/tmp/signal_crypto_debug.log",
-        io_lib:format("verify_bundle_signature: IdentityKey (hex): ~s\n",
-            [string:join([io_lib:format("~2.16.0B", [X]) || <<X:8>> <= IdentityKey], " ")]), [append]),
-    file:write_file("/tmp/signal_crypto_debug.log",
-        io_lib:format("verify_bundle_signature: SignedPreKeyPublic (hex): ~s\n",
-            [string:join([io_lib:format("~2.16.0B", [X]) || <<X:8>> <= SignedPreKeyPublic], " ")]), [append]),
+    file:write_file(
+        "/tmp/signal_crypto_debug.log",
+        io_lib:format(
+            "verify_bundle_signature: IdentityKey ~p (~p bytes), SignedPreKeyPublic ~p (~p bytes)\n",
+            [IdentityKey, byte_size(IdentityKey), SignedPreKeyPublic, byte_size(SignedPreKeyPublic)]
+        ),
+        [append]
+    ),
+    file:write_file(
+        "/tmp/signal_crypto_debug.log",
+        io_lib:format(
+            "verify_bundle_signature: IdentityKey (hex): ~s\n",
+            [string:join([io_lib:format("~2.16.0B", [X]) || <<X:8>> <= IdentityKey], " ")]
+        ),
+        [append]
+    ),
+    file:write_file(
+        "/tmp/signal_crypto_debug.log",
+        io_lib:format(
+            "verify_bundle_signature: SignedPreKeyPublic (hex): ~s\n",
+            [string:join([io_lib:format("~2.16.0B", [X]) || <<X:8>> <= SignedPreKeyPublic], " ")]
+        ),
+        [append]
+    ),
     signal_crypto:verify(IdentityKey, SignedPreKeyPublic, Signature).
 
 calculate_shared_secret(PrivateKey, PublicKey) ->
@@ -271,37 +340,49 @@ create_message_header(Session) ->
     SignedPreKeyId = maps:get(signed_pre_key_id, Session),
     EphemeralKey = maps:get(ephemeral_key, Session),
     Header = <<PreKeyId:32, SignedPreKeyId:32, EphemeralKey/binary>>,
-    io:format("create_message_header: PreKeyId=~p, SignedPreKeyId=~p, EphemeralKey=~p (~p bytes), Header=~p (~p bytes)~n",
-              [PreKeyId,
-               SignedPreKeyId,
-               EphemeralKey,
-               byte_size(EphemeralKey),
-               Header,
-               byte_size(Header)]),
+    io:format(
+        "create_message_header: PreKeyId=~p, SignedPreKeyId=~p, EphemeralKey=~p (~p bytes), Header=~p (~p bytes)~n",
+        [
+            PreKeyId,
+            SignedPreKeyId,
+            EphemeralKey,
+            byte_size(EphemeralKey),
+            Header,
+            byte_size(Header)
+        ]
+    ),
     Header.
 
 verify_message_header(Session, Header) ->
     PreKeyId = maps:get(pre_key_id, Session),
     SignedPreKeyId = maps:get(signed_pre_key_id, Session),
     EphemeralKey = maps:get(ephemeral_key, Session),
-    io:format("verify_message_header: PreKeyId=~p, SignedPreKeyId=~p, EphemeralKey=~p (~p bytes), Header=~p (~p bytes)~n",
-              [PreKeyId,
-               SignedPreKeyId,
-               EphemeralKey,
-               byte_size(EphemeralKey),
-               Header,
-               byte_size(Header)]),
+    io:format(
+        "verify_message_header: PreKeyId=~p, SignedPreKeyId=~p, EphemeralKey=~p (~p bytes), Header=~p (~p bytes)~n",
+        [
+            PreKeyId,
+            SignedPreKeyId,
+            EphemeralKey,
+            byte_size(EphemeralKey),
+            Header,
+            byte_size(Header)
+        ]
+    ),
     <<HeaderPreKeyId:32, HeaderSignedPreKeyId:32, HeaderEphemeralKey/binary>> = Header,
     Result =
-        PreKeyId =:= HeaderPreKeyId
-        andalso SignedPreKeyId =:= HeaderSignedPreKeyId
-        andalso EphemeralKey =:= HeaderEphemeralKey,
-    io:format("verify_message_header: HeaderPreKeyId=~p, HeaderSignedPreKeyId=~p, HeaderEphemeralKey=~p (~p bytes), Result=~p~n",
-              [HeaderPreKeyId,
-               HeaderSignedPreKeyId,
-               HeaderEphemeralKey,
-               byte_size(HeaderEphemeralKey),
-               Result]),
+        PreKeyId =:= HeaderPreKeyId andalso
+            SignedPreKeyId =:= HeaderSignedPreKeyId andalso
+            EphemeralKey =:= HeaderEphemeralKey,
+    io:format(
+        "verify_message_header: HeaderPreKeyId=~p, HeaderSignedPreKeyId=~p, HeaderEphemeralKey=~p (~p bytes), Result=~p~n",
+        [
+            HeaderPreKeyId,
+            HeaderSignedPreKeyId,
+            HeaderEphemeralKey,
+            byte_size(HeaderEphemeralKey),
+            Result
+        ]
+    ),
     Result.
 
 %% Private helper to encode a binary as length-prefixed
