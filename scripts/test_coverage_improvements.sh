@@ -23,25 +23,35 @@ make test
 
 # Run coverage analysis
 echo "Running coverage analysis..."
-make coverage
+make test-cover
 
-# Run specific module tests
+# Run specific test categories
+echo "Running unit tests..."
+make test-unit-cover
+
+echo "Running integration tests..."
+make test-integration-cover
+
+echo "Running smoke tests..."
+make test-smoke
+
+# Run specific module tests using the new structure
 echo "Running protocol module tests..."
-ct_run -suite protocol_SUITE -pa ebin
+ct_run -suite test/erl/unit/protocol/protocol_SUITE -pa ebin
 
 echo "Running signal_session module tests..."
-ct_run -suite signal_session_SUITE -pa ebin
+ct_run -suite test/erl/unit/session/signal_session_SUITE -pa ebin
 
 echo "Running signal_crypto module tests..."
-ct_run -suite signal_crypto_SUITE -pa ebin
+ct_run -suite test/erl/unit/crypto/signal_crypto_SUITE -pa ebin
 
 # Run integration tests
 echo "Running integration tests..."
-ct_run -suite integration_SUITE -pa ebin
+ct_run -suite test/erl/integration/integration_SUITE -pa ebin
 
 # Generate final coverage report
 echo "Generating final coverage report..."
-make coverage
+make test-cover
 
 echo ""
 echo "=== Coverage Improvement Summary ==="

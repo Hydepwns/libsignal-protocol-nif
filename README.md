@@ -115,41 +115,73 @@ case libsignal_protocol_gleam.init() {
 
 ## Testing (Erlang)
 
-### Test Groups
+### Test Organization
 
-The test suites are organized into two groups to handle expensive cryptographic operations:
+The test suite is organized into three main categories:
 
-- **Fast tests**: Basic functionality, error handling, and simple operations
-- **Expensive tests**: Concurrent operations, large data processing, and stress tests
+- **Unit Tests** (`test/erl/unit/`): Individual module tests organized by functionality
+
+  - `crypto/`: Cryptographic operations and key management
+  - `protocol/`: Signal Protocol implementation
+  - `session/`: Session management and state handling
+  - `nif/`: NIF-specific functionality and caching
+
+- **Integration Tests** (`test/erl/integration/`): End-to-end workflow tests
+
+  - Complete Signal Protocol workflows
+  - Performance and stress tests
+
+- **Smoke Tests** (`test/erl/smoke/`): Quick validation tests
+  - Basic functionality verification
+  - Module loading and initialization
 
 ### Running Tests
 
-**Run only fast tests (recommended for development):**
+**Run all tests:**
 
 ```bash
-rebar3 as test ct --group fast --cover
+make test
 ```
 
-**Run only expensive tests:**
+**Run specific test categories:**
 
 ```bash
-rebar3 as test ct --group expensive
+make test-unit          # Unit tests only
+make test-integration   # Integration tests only
+make test-smoke         # Smoke tests only
 ```
 
-**Run all tests (may take a long time):**
+**Run tests with coverage:**
 
 ```bash
-rebar3 as test ct --cover
+make test-cover         # All tests with coverage
+make test-unit-cover    # Unit tests with coverage
+make test-integration-cover  # Integration tests with coverage
 ```
 
-**Run specific test suites:**
+**Run specific test suites using rebar3:**
+
+```bash
+# Unit tests
+rebar3 as unit ct --suite=test/erl/unit/crypto/signal_crypto_SUITE
+rebar3 as unit ct --suite=test/erl/unit/protocol/protocol_SUITE
+rebar3 as unit ct --suite=test/erl/unit/session/signal_session_SUITE
+
+# Integration tests
+rebar3 as integration ct --suite=test/erl/integration/integration_SUITE
+
+# Smoke tests
+rebar3 as smoke ct --suite=test/erl/smoke/simple_test_SUITE
+```
+
+**Run tests by groups (fast/expensive):**
 
 ```bash
 # Fast tests only
-rebar3 as test ct --suite=test/erl/protocol_SUITE --group fast --cover
+rebar3 as test ct --group fast --cover
 
-# All tests in a suite
-rebar3 as test ct --suite=test/erl/protocol_SUITE --cover
+# Expensive tests only
+rebar3 as test ct --group expensive
 ```
 
 ### Test Coverage
