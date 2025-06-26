@@ -12,3 +12,9 @@ deps/
 priv/
 erl_crash.dump
 tmp/
+
+# CMake build artifacts
+c_src/CMakeCache.txt
+c_src/CMakeFiles/
+c_src/cmake_install.cmake
+c_src/Makefile
