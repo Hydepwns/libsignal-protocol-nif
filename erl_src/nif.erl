@@ -2,7 +2,8 @@
 
 -export([init/0, generate_identity_key_pair/0, generate_pre_key/1,
          generate_signed_pre_key/2, create_session/1, process_pre_key_bundle/2, encrypt_message/2,
-         decrypt_message/2, get_cache_stats/1, reset_cache_stats/1, set_cache_size/3]).
+         decrypt_message/2, get_cache_stats/1, reset_cache_stats/1, set_cache_size/3,
+         verify_signature/3, compute_key/2]).
 
 %% @doc Initialize the NIF library
 %% @returns ok | {error, Reason}
@@ -40,75 +41,28 @@ load_nif_absolute(Filename) ->
         PrivDir ->
             % Convert to absolute path
             AbsPrivDir = filename:absname(PrivDir),
-            % For macOS, we need to handle the extension manually
-            case os:type() of
-                {unix, darwin} ->
-                    DylibPath = filename:join(AbsPrivDir, Filename ++ ".dylib"),
-                    SoPath = filename:join(AbsPrivDir, Filename ++ ".so"),
-                    % Create symlink if it doesn't exist
-                    case file:read_link(SoPath) of
-                        {error, enoent} ->
-                            % Symlink doesn't exist, create it
-                            case file:make_symlink(DylibPath, SoPath) of
-                                ok ->
-                                    error_logger:info_msg("[NIF DEBUG] Created symlink ~s -> ~s",
-                                                          [SoPath, DylibPath]);
-                                {error, SymlinkReason} ->
-                                    error_logger:info_msg("[NIF DEBUG] Failed to create symlink: ~p",
-                                                          [SymlinkReason])
-                            end;
-                        _ ->
-                            % Symlink already exists
-                            ok
-                    end,
-                    % Use base filename without extension so Erlang appends .so correctly
-                    BasePath = filename:join(AbsPrivDir, Filename),
-                    error_logger:info_msg("[NIF DEBUG] code:priv_dir/1 returned ~p (abs: ~s), trying ~s",
-                                          [PrivDir, AbsPrivDir, BasePath]),
-                    error_logger:info_msg("[NIF DEBUG] calling erlang:load_nif directly with path: ~s",
-                                          [BasePath]),
-                    try erlang:load_nif(BasePath, 0) of
-                        ok ->
-                            error_logger:info_msg("[NIF DEBUG] erlang:load_nif succeeded"),
-                            ok;
-                        {error, {Reason, Details}} ->
-                            error_logger:info_msg("[NIF DEBUG] erlang:load_nif failed: ~p, details: ~p",
-                                                  [Reason, Details]),
-                            {error, {Reason, Details}};
-                        {error, Reason} ->
-                            error_logger:info_msg("[NIF DEBUG] erlang:load_nif failed: ~p",
-                                                  [Reason]),
-                            {error, Reason}
-                    catch
-                        Class:Error:Stacktrace ->
-                            error_logger:info_msg("[NIF DEBUG] Exception during erlang:load_nif: ~p:~p~nStacktrace: ~p",
-                                                  [Class, Error, Stacktrace]),
-                            {error, {Class, Error, Stacktrace}}
-                    end;
-                _ ->
-                    NifPath = filename:join(AbsPrivDir, Filename),
-                    error_logger:info_msg("[NIF DEBUG] code:priv_dir/1 returned ~p (abs: ~s), trying ~s",
-                                          [PrivDir, AbsPrivDir, NifPath]),
-                    error_logger:info_msg("[NIF DEBUG] calling erlang:load_nif directly with path: ~s",
-                                          [NifPath]),
-                    try erlang:load_nif(NifPath, 0) of
-                        ok ->
-                            error_logger:info_msg("[NIF DEBUG] erlang:load_nif succeeded"),
-                            ok;
-                        {error, {Reason, Details}} ->
-                            error_logger:info_msg("[NIF DEBUG] erlang:load_nif failed: ~p, details: ~p",
-                                                  [Reason, Details]),
-                            {error, {Reason, Details}};
-                        {error, Reason} ->
-                            error_logger:info_msg("[NIF DEBUG] erlang:load_nif failed: ~p",
-                                                  [Reason]),
-                            {error, Reason}
-                    catch
-                        Class:Error:Stacktrace ->
-                            error_logger:info_msg("[NIF DEBUG] Exception during erlang:load_nif: ~p:~p~nStacktrace: ~p",
-                                                  [Class, Error, Stacktrace]),
-                            {error, {Class, Error, Stacktrace}}
-                    end
+            NifPath = filename:join(AbsPrivDir, Filename),
+            error_logger:info_msg("[NIF DEBUG] code:priv_dir/1 returned ~p (abs: ~s), trying ~s",
+                                  [PrivDir, AbsPrivDir, NifPath]),
+            error_logger:info_msg("[NIF DEBUG] calling erlang:load_nif directly with path: ~s",
+                                  [NifPath]),
+            try erlang:load_nif(NifPath, 0) of
+                ok ->
+                    error_logger:info_msg("[NIF DEBUG] erlang:load_nif succeeded"),
+                    ok;
+                {error, {Reason, Details}} ->
+                    error_logger:info_msg("[NIF DEBUG] erlang:load_nif failed: ~p, details: ~p",
+                                          [Reason, Details]),
+                    {error, {Reason, Details}};
+                {error, Reason} ->
+                    error_logger:info_msg("[NIF DEBUG] erlang:load_nif failed: ~p",
+                                          [Reason]),
+                    {error, Reason}
+            catch
+                Class:Error:Stacktrace ->
+                    error_logger:info_msg("[NIF DEBUG] Exception during erlang:load_nif: ~p:~p~nStacktrace: ~p",
+                                          [Class, Error, Stacktrace]),
+                    {error, {Class, Error, Stacktrace}}
             end
     end.
 
@@ -137,12 +91,12 @@ load_nif(Path) ->
 load_nif_platform_specific() ->
     case os:type() of
         {unix, darwin} ->
-            % On macOS, pass filename without .dylib extension to prevent .so suffix
+            % On macOS, pass just 'nif' and let Erlang append .so (which will resolve to .dylib via symlink)
             load_nif_absolute("nif");
         {unix, _} ->
-            load_nif_absolute("nif.so");
+            load_nif_absolute("nif");
         {win32, _} ->
-            load_nif_absolute("nif.dll")
+            load_nif_absolute("nif")
     end.
 
 %% @doc Generate a new identity key pair
@@ -208,4 +162,19 @@ reset_cache_stats(_Session) ->
 %% @param RootKeySize The root key cache size
 %% @returns {ok, Stats} | {error, Reason}
 set_cache_size(_Session, _ChainKeySize, _RootKeySize) ->
+    erlang:nif_error(nif_not_loaded).
+
+%% @doc Verify a signature
+%% @param PublicKey The public key to verify against
+%% @param Message The message to verify
+%% @param Signature The signature to verify
+%% @returns {ok, Verified} | {error, Reason}
+verify_signature(_PublicKey, _Message, _Signature) ->
+    erlang:nif_error(nif_not_loaded).
+
+%% @doc Compute a key
+%% @param PublicKey The public key to compute the key from
+%% @param PrivateKey The private key to compute the key with
+%% @returns {ok, Key} | {error, Reason}
+compute_key(_PublicKey, _PrivateKey) ->
     erlang:nif_error(nif_not_loaded).

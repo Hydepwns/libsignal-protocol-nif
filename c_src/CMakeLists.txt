@@ -63,10 +63,23 @@ endif()
 # Add include directories
 include_directories(${OPENSSL_INCLUDE_DIRS} ${ERLANG_INCLUDE_DIR})
 
-# Add source files - only build the main NIF implementation
+# Add source files - modular structure
 add_library(nif SHARED
     nif.c
+    constants.h
+    types.h
+    utils/utils.c
+    utils/utils.h
+    utils/error_handling.c
+    utils/error_handling.h
+    keys/keys.c
+    keys/keys.h
+    session/session.c
+    session/session.h
+    cache/cache.c
+    cache/cache.h
     crypto/crypto.c
+    crypto/crypto.h
     protocol/protocol.c
     protocol/protocol.h
 )
@@ -91,7 +104,29 @@ if(APPLE)
     )
     set_target_properties(nif PROPERTIES
         SUFFIX ".dylib"
-        LINK_FLAGS "-undefined dynamic_lookup -Wl,-exported_symbol,_nif_init -Wl,-exported_symbol,_nif_funcs -Wl,-rpath,@loader_path"
+        LINK_FLAGS "-undefined dynamic_lookup \
+        -Wl,-exported_symbol,_nif_init \
+        -Wl,-exported_symbol,_nif_funcs \
+        -Wl,-exported_symbol,_on_load \
+        -Wl,-exported_symbol,_on_unload \
+        -Wl,-exported_symbol,_generate_identity_key_pair \
+        -Wl,-exported_symbol,_generate_pre_key \
+        -Wl,-exported_symbol,_generate_signed_pre_key \
+        -Wl,-exported_symbol,_create_session \
+        -Wl,-exported_symbol,_process_pre_key_bundle \
+        -Wl,-exported_symbol,_encrypt_message \
+        -Wl,-exported_symbol,_decrypt_message \
+        -Wl,-exported_symbol,_get_cache_stats \
+        -Wl,-exported_symbol,_reset_cache_stats \
+        -Wl,-exported_symbol,_set_cache_size \
+        -Wl,-exported_symbol,_verify_signature \
+        -Wl,-exported_symbol,_compute_key \
+        -Wl,-exported_symbol,_generate_key_pair \
+        -Wl,-exported_symbol,_generate_curve25519_key_pair \
+        -Wl,-exported_symbol,_generate_ed25519_key_pair \
+        -Wl,-exported_symbol,_validate_key_pair \
+        -Wl,-exported_symbol,_private_to_public_key \
+        -Wl,-rpath,@loader_path"
     )
 elseif(UNIX)
     set_target_properties(nif PROPERTIES
@@ -109,3 +144,15 @@ endif()
 install(TARGETS nif
     LIBRARY DESTINATION priv
 )
+
+# Post-build step: copy and symlink for rebar3 test and default priv dirs (macOS)
+if(APPLE)
+    add_custom_command(TARGET nif POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/../_build/test/lib/nif/priv"
+        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:nif>" "${CMAKE_SOURCE_DIR}/../_build/test/lib/nif/priv/nif.dylib"
+        COMMAND ${CMAKE_COMMAND} -E create_symlink "nif.dylib" "${CMAKE_SOURCE_DIR}/../_build/test/lib/nif/priv/nif.so"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/../_build/default/lib/nif/priv"
+        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:nif>" "${CMAKE_SOURCE_DIR}/../_build/default/lib/nif/priv/nif.dylib"
+        COMMAND ${CMAKE_COMMAND} -E create_symlink "nif.dylib" "${CMAKE_SOURCE_DIR}/../_build/default/lib/nif/priv/nif.so"
+    )
+endif()

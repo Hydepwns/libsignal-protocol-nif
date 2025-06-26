@@ -26,7 +26,7 @@ else
 endif
 
 # Build targets
-.PHONY: all clean test test-clean deps install perf-test perf-monitor docker-build docker-test release dev-setup dev-test monitor-memory monitor-cache help ci-build ci-test
+.PHONY: all clean test test-unit test-integration test-smoke test-clean deps install perf-test perf-monitor docker-build docker-test release dev-setup dev-test monitor-memory monitor-cache help ci-build ci-test
 
 # Default target
 all: build
@@ -36,11 +36,13 @@ BUILD_DIR = c_src/build
 
 build: $(BUILD_DIR)
 	cd $(BUILD_DIR) && cmake .. && make
-	# Copy NIF to only the correct test and default profile priv directories
+	# Copy NIF to all relevant test and default profile priv directories
 	mkdir -p _build/default/lib/nif/priv
 	mkdir -p _build/test/lib/nif/priv
+	mkdir -p _build/unit+test/lib/nif/priv
 	cp priv/nif.dylib _build/default/lib/nif/priv/ || true
 	cp priv/nif.dylib _build/test/lib/nif/priv/ || true
+	cp priv/nif.dylib _build/unit+test/lib/nif/priv/ || true
 
 # CI-specific build target
 ci-build: $(BUILD_DIR)
@@ -68,17 +70,40 @@ $(BUILD_DIR):
 # Create test directories
 test-dirs:
 	mkdir -p tmp/ct_logs
+	mkdir -p tmp/ct_logs_unit
+	mkdir -p tmp/ct_logs_integration
+	mkdir -p tmp/ct_logs_smoke
 	mkdir -p tmp/cover
 	mkdir -p tmp/doc
 	mkdir -p tmp/perf
 
-# Run tests
+# Run all tests
 test: test-dirs
 	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 ct
+
+# Run unit tests only
+test-unit: test-dirs
+	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 as unit ct
+
+# Run integration tests only
+test-integration: test-dirs
+	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 as integration ct
+
+# Run smoke tests only
+test-smoke: test-dirs
+	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 as smoke ct
 
 # Run tests with coverage
 test-cover: test-dirs
 	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 ct --cover
+
+# Run unit tests with coverage
+test-unit-cover: test-dirs
+	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 as unit ct --cover
+
+# Run integration tests with coverage
+test-integration-cover: test-dirs
+	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 as integration ct --cover
 
 # Run performance tests
 perf-test: test-dirs build
@@ -143,7 +168,7 @@ release-major:
 dev-setup: deps build test-dirs
 	@echo "Development environment setup complete"
 
-dev-test: test perf-test
+dev-test: test-smoke test-unit test-integration perf-test
 	@echo "All tests completed"
 
 # Monitoring targets
@@ -162,27 +187,32 @@ ci-test: test-dirs
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  build          - Build all components"
-	@echo "  clean          - Clean all build artifacts"
-	@echo "  test-clean     - Clean all test artifacts"
-	@echo "  test           - Run all tests"
-	@echo "  test-cover     - Run tests with coverage"
-	@echo "  perf-test      - Run performance benchmarks"
-	@echo "  perf-monitor   - Run performance monitoring"
-	@echo "  docs           - Generate documentation"
-	@echo "  deps           - Install dependencies"
-	@echo "  install        - Build and install"
-	@echo "  docker-build   - Build Docker images"
-	@echo "  docker-test    - Run tests in Docker"
-	@echo "  docker-perf    - Run performance tests in Docker"
-	@echo "  release        - Create a new release"
-	@echo "  release-patch  - Create a patch release"
-	@echo "  release-minor  - Create a minor release"
-	@echo "  release-major  - Create a major release"
-	@echo "  dev-setup      - Setup development environment"
-	@echo "  dev-test       - Run all development tests"
-	@echo "  monitor-memory - Monitor memory usage"
-	@echo "  monitor-cache  - Monitor cache performance"
-	@echo "  ci-build       - Build for CI"
-	@echo "  ci-test        - Run CI tests"
-	@echo "  help           - Show this help message" 
+	@echo "  build              - Build all components"
+	@echo "  clean              - Clean all build artifacts"
+	@echo "  test-clean         - Clean all test artifacts"
+	@echo "  test               - Run all tests"
+	@echo "  test-unit          - Run unit tests only"
+	@echo "  test-integration   - Run integration tests only"
+	@echo "  test-smoke         - Run smoke tests only"
+	@echo "  test-cover         - Run tests with coverage"
+	@echo "  test-unit-cover    - Run unit tests with coverage"
+	@echo "  test-integration-cover - Run integration tests with coverage"
+	@echo "  perf-test          - Run performance benchmarks"
+	@echo "  perf-monitor       - Run performance monitoring"
+	@echo "  docs               - Generate documentation"
+	@echo "  deps               - Install dependencies"
+	@echo "  install            - Build and install"
+	@echo "  docker-build       - Build Docker images"
+	@echo "  docker-test        - Run tests in Docker"
+	@echo "  docker-perf        - Run performance tests in Docker"
+	@echo "  release            - Create a new release"
+	@echo "  release-patch      - Create a patch release"
+	@echo "  release-minor      - Create a minor release"
+	@echo "  release-major      - Create a major release"
+	@echo "  dev-setup          - Setup development environment"
+	@echo "  dev-test           - Run all development tests"
+	@echo "  monitor-memory     - Monitor memory usage"
+	@echo "  monitor-cache      - Monitor cache performance"
+	@echo "  ci-build           - Build for CI"
+	@echo "  ci-test            - Run CI tests"
+	@echo "  help               - Show this help message" 
