@@ -693,3 +693,75 @@ crypto_error_t evp_validate_key(EVP_PKEY *key)
     }
     return CRYPTO_OK;
 }
+
+crypto_error_t evp_compute_shared_secret(EVP_PKEY *private_key, EVP_PKEY *public_key,
+                                         unsigned char *shared_secret, size_t *shared_secret_len)
+{
+    if (!private_key || !public_key || !shared_secret || !shared_secret_len)
+    {
+        return CRYPTO_ERROR_INVALID_PARAMETER;
+    }
+
+    EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(private_key, NULL);
+    if (!ctx)
+    {
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    if (EVP_PKEY_derive_init(ctx) <= 0)
+    {
+        EVP_PKEY_CTX_free(ctx);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    if (EVP_PKEY_derive_set_peer(ctx, public_key) <= 0)
+    {
+        EVP_PKEY_CTX_free(ctx);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    size_t len = 0;
+    if (EVP_PKEY_derive(ctx, NULL, &len) <= 0)
+    {
+        EVP_PKEY_CTX_free(ctx);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    if (len > *shared_secret_len)
+    {
+        EVP_PKEY_CTX_free(ctx);
+        return CRYPTO_ERROR_INVALID_PARAMETER;
+    }
+
+    if (EVP_PKEY_derive(ctx, shared_secret, &len) <= 0)
+    {
+        EVP_PKEY_CTX_free(ctx);
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    *shared_secret_len = len;
+    EVP_PKEY_CTX_free(ctx);
+    return CRYPTO_OK;
+}
+
+crypto_error_t evp_derive_key(const unsigned char *input, size_t input_len,
+                              const unsigned char *salt, size_t salt_len,
+                              unsigned char *output, size_t output_len)
+{
+    if (!input || !output)
+    {
+        return CRYPTO_ERROR_INVALID_PARAMETER;
+    }
+
+    // Use PBKDF2 with SHA-256 for key derivation
+    if (!PKCS5_PBKDF2_HMAC((const char *)input, input_len,
+                           salt, salt_len,
+                           10000, // iterations
+                           EVP_sha256(),
+                           output_len, output))
+    {
+        return CRYPTO_ERROR_INTERNAL;
+    }
+
+    return CRYPTO_OK;
+}

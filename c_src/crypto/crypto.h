@@ -17,6 +17,7 @@
 #define EC_PUBLIC_KEY_SIZE 65  // Uncompressed P-256 point
 #define EC_PRIVATE_KEY_SIZE 32 // P-256 private key
 #define EC_SIGNATURE_SIZE 64   // ECDSA signature (r + s)
+#define ED25519_KEY_SIZE 64
 
 // Error codes
 typedef enum
@@ -44,6 +45,11 @@ typedef struct
 {
     uint8_t key[CURVE25519_KEY_SIZE];
 } curve25519_key_t;
+
+typedef struct
+{
+    uint8_t key[ED25519_KEY_SIZE];
+} ed25519_key_t;
 
 // Function declarations
 
@@ -101,5 +107,9 @@ crypto_error_t evp_deserialize_public_key(const uint8_t *buffer, size_t buffer_l
 crypto_error_t evp_serialize_private_key(EVP_PKEY *key, uint8_t *buffer, size_t *buffer_len);
 crypto_error_t evp_deserialize_private_key(const uint8_t *buffer, size_t buffer_len, EVP_PKEY **key);
 crypto_error_t evp_validate_key(EVP_PKEY *key);
+crypto_error_t evp_compute_shared_secret(EVP_PKEY *private_key, EVP_PKEY *public_key, unsigned char *shared_secret, size_t *shared_secret_len);
+crypto_error_t evp_derive_key(const unsigned char *input, size_t input_len,
+                              const unsigned char *salt, size_t salt_len,
+                              unsigned char *output, size_t output_len);
 
 #endif // CRYPTO_H
