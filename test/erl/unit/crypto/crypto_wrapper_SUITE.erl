@@ -50,8 +50,8 @@ test_generate_key_pair(_Config) ->
     ?assertNotEqual(PrivateKey, PrivateKey2).
 
 test_sign_verify(_Config) ->
-    % Generate key pair
-    {ok, {PublicKey, PrivateKey}} = signal_crypto:generate_key_pair(),
+    % Generate Ed25519 key pair
+    {ok, {PublicKey, PrivateKey}} = signal_crypto:generate_ed25519_key_pair(),
 
     % Test data to sign
     TestData =
@@ -61,17 +61,17 @@ test_sign_verify(_Config) ->
          crypto:strong_rand_bytes(5000)],
 
     [begin
-         % Sign data with private key (HMAC-based)
+         % Sign data with private key (Ed25519)
          {ok, Signature} = signal_crypto:sign(PrivateKey, Data),
          ?assert(is_binary(Signature)),
          ?assert(byte_size(Signature) > 0),
 
-         % Verify signature with private key (HMAC-based, same key)
-         {ok, true} = signal_crypto:verify(PrivateKey, Data, Signature),
+         % Verify signature with public key (Ed25519)
+         {ok, true} = signal_crypto:verify(PublicKey, Data, Signature),
 
          % Test invalid signature
          InvalidSignature = crypto:strong_rand_bytes(byte_size(Signature)),
-         {error, invalid_signature} = signal_crypto:verify(PrivateKey, Data, InvalidSignature)
+         {error, invalid_signature} = signal_crypto:verify(PublicKey, Data, InvalidSignature)
      end
      || Data <- TestData].
 
