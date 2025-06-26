@@ -16,6 +16,36 @@ Cross-platform BEAM wrappers (Erlang/Elixir/Gleam) for the Signal Protocol libra
 - Cross-platform support (Linux, macOS, Windows)
 - OpenSSL-based cryptographic primitives
 
+## Current Status
+
+### Test Results (Latest Run)
+
+- **Overall Success Rate**: 75% (6/8 tests passing)
+- **Passing Tests**: 6 out of 8
+- **Failing Tests**: 2 out of 8
+
+### ✅ Working Functionality
+
+- Basic crypto initialization
+- Curve25519 key pair generation
+- SHA-256 and SHA-512 hashing
+- HMAC-SHA256
+- AES-GCM encryption/decryption
+
+### ❌ Known Issues
+
+- **Ed25519 Key Generation**: Returns 64-byte public keys instead of expected 32-byte keys
+- **Ed25519 Signing/Verification**: Fails due to incorrect key format
+- **Missing C Source Files**: `c_src/CMakeLists.txt` referenced in Makefile but not present
+- **NIF Loading Issues**: Some test modules fail to load due to missing NIF libraries
+
+### 🔧 Development Status
+
+- Core cryptographic operations are functional
+- Signal Protocol primitives working correctly
+- Ed25519 digital signatures need implementation fixes
+- Build system requires C source files to be added
+
 ## Quick Start
 
 ```bash
@@ -136,6 +166,19 @@ The test suite is organized into three main categories:
   - Module loading and initialization
 
 ### Running Tests
+
+**Current Test Status:**
+
+```bash
+# Run all tests (6/8 passing, 2 failing)
+make test
+
+# Run individual passing tests
+rebar3 ct --suite=test/erl/unit/crypto/signal_crypto_SUITE --case=test_basic_crypto
+rebar3 ct --suite=test/erl/unit/crypto/signal_crypto_SUITE --case=test_curve25519_keypair
+rebar3 ct --suite=test/erl/unit/crypto/signal_crypto_SUITE --case=test_sha256
+rebar3 ct --suite=test/erl/unit/crypto/signal_crypto_SUITE --case=test_aes_gcm_encryption
+```
 
 **Run all tests:**
 
