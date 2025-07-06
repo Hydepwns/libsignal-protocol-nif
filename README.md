@@ -1,61 +1,86 @@
 # libsignal-protocol-nif
 
-Erlang NIF implementing the complete Signal Protocol with X3DH key agreement and Double Ratchet messaging.
+Erlang NIF implementing Signal Protocol cryptographic primitives with libsodium.
 
-## Jul-06 Status: ✅ COMPLETE
-
-**Signal Protocol Implementation:**
-
-- ✅ X3DH key agreement protocol
-- ✅ Double Ratchet algorithm with forward/future secrecy
-- ✅ Production-grade libsodium cryptography
-- ✅ Comprehensive test suite
+> Jul-06 Status: ✅ CRYPTO IMPLEMENTATION COMPLETE
+> **Implemented Cryptographic Functions:**
+>
+> - Curve25519 key pair generation (X25519 ECDH)
+> - Ed25519 key pair generation and digital signatures
+> - SHA-256 and SHA-512 hashing
+> - HMAC-SHA256 authentication
+> - AES-GCM encryption/decryption
 
 ## Quick Start
 
 ```bash
-nix-shell
-./test/erl/final_deployment_test.erl
+# Build the project
+nix-shell --run "make build"
+
+# Run crypto tests
+nix-shell --run "rebar3 ct --suite=test/erl/unit/crypto/signal_crypto_SUITE.erl"
 ```
 
 ## Build
 
 ```bash
-nix-shell --run "make clean && make"
+# Clean build
+nix-shell --run "make clean && make build"
+
+# Run all available tests
+nix-shell --run "make test-unit"
 ```
 
-## API
+## Cryptographic API
 
-### X3DH Key Agreement
+### Key Generation
 
 ```erlang
-{ok, {IdPub, IdPriv}} = libsignal_protocol_nif:generate_identity_key_pair(),
-{ok, {PreKeyId, PreKeyPub}} = libsignal_protocol_nif:generate_pre_key(1),
-{ok, {SignedId, SignedPub, Signature}} = libsignal_protocol_nif:generate_signed_pre_key(IdPriv, 1),
-{ok, {SharedSecret, EphemeralPub}} = libsignal_protocol_nif:process_pre_key_bundle(IdPriv, Bundle).
+% Curve25519 key pairs (for ECDH key exchange)
+{ok, {PublicKey, PrivateKey}} = signal_nif:generate_curve25519_keypair(),
+
+% Ed25519 key pairs (for digital signatures)
+{ok, {PublicKey, PrivateKey}} = signal_nif:generate_ed25519_keypair().
 ```
 
-### Double Ratchet Messaging
+### Digital Signatures
 
 ```erlang
-{ok, Session} = libsignal_protocol_nif_v2:init_double_ratchet(SharedSecret, RemotePub, IsAlice),
-{ok, {Encrypted, NewSession}} = libsignal_protocol_nif_v2:dr_encrypt_message(Session, Message),
-{ok, {Decrypted, NewSession}} = libsignal_protocol_nif_v2:dr_decrypt_message(Session, Encrypted).
+% Sign data with Ed25519
+{ok, Signature} = signal_nif:sign_data(PrivateKey, Message),
+
+% Verify signature
+ok = signal_nif:verify_signature(PublicKey, Message, Signature).
 ```
 
-## Implementation
+### Hashing and Authentication
 
-- **Cryptography**: Curve25519 ECDH, ChaCha20-Poly1305 AEAD, Ed25519 signatures
-- **Session State**: 200 bytes per Double Ratchet session
-- **Message Overhead**: 52 bytes (40-byte header + 12-byte nonce)
-- **Security**: Forward secrecy, future secrecy, message authentication
+```erlang
+% SHA-256 hashing
+{ok, Hash} = signal_nif:sha256(Data),
 
-## Documentation
+% SHA-512 hashing
+{ok, Hash} = signal_nif:sha512(Data),
 
-See `docs/IMPLEMENTATION.md` for complete technical details.
+% HMAC-SHA256 authentication
+{ok, Hmac} = signal_nif:hmac_sha256(Key, Data).
+```
 
-## Requirements
+### Encryption
 
-- NixOS/Nix environment
-- libsodium library
-- AMD64 architecture
+```erlang
+% AES-GCM encryption
+{ok, Ciphertext, Tag} = signal_nif:aes_gcm_encrypt(Key, IV, Plaintext, AAD, TagLength),
+
+% AES-GCM decryption
+{ok, Plaintext} = signal_nif:aes_gcm_decrypt(Key, IV, Ciphertext, AAD, Tag, PlaintextLength).
+```
+
+## Implementation Details
+
+- **Cryptography**: libsodium-based implementation
+- **Key Sizes**: 32-byte keys for Curve25519 and Ed25519
+- **Hash Sizes**: SHA-256 (32 bytes), SHA-512 (64 bytes)
+- **Signature Size**: Ed25519 signatures are 64 bytes
+- **Memory Management**: Secure memory clearing with `sodium_memzero()`
+- **Error Handling**: Comprehensive error checking and reporting

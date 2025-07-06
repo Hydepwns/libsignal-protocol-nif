@@ -2,36 +2,51 @@
 
 ## Overview
 
-Erlang NIF implementing Signal Protocol cryptography with libsodium backend.
+Erlang NIF implementing Signal Protocol cryptographic primitives with libsodium backend.
 
 ## Components
 
-- **NIF Layer**: `c_src/libsignal_protocol_nif.c` - C implementation with libsodium
-- **Erlang Module**: `erl_src/libsignal_protocol_nif.erl` - Erlang interface
-- **Verification**: `verify_foundation.sh` - Crypto validation script
+- **Primary NIF**: `c_src/signal_nif.c` - Core crypto implementation with libsodium
+- **Erlang Module**: `erl_src/signal_nif.erl` - Erlang interface with robust path loading
+- **Test Suite**: `test/erl/unit/crypto/signal_crypto_SUITE.erl` - Comprehensive crypto validation
 
-## Cryptographic Primitives
+## Implemented Cryptographic Primitives
 
-- **Key Generation**: Curve25519 (32-byte keys)
-- **Key Agreement**: ECDH with Curve25519
-- **Encryption**: ChaCha20-Poly1305 AEAD
-- **Signatures**: HMAC-SHA256 for pre-keys
-- **Session State**: 64-byte session management
+- **Key Generation**: Curve25519 (X25519) and Ed25519 key pairs
+- **Digital Signatures**: Ed25519 signing and verification
+- **Hashing**: SHA-256 and SHA-512
+- **Authentication**: HMAC-SHA256
+- **Encryption**: AES-GCM with authentication
 
 ## Data Flow
 
-```
-Erlang → NIF → libsodium → Cryptographic Operations
+```c
+Erlang API → NIF Interface → libsodium → Cryptographic Operations
 ```
 
-## Build Dependencies
+## NIF Loading Strategy
 
-- NixOS/Nix environment
-- libsodium library
-- C compiler toolchain
+Multiple path fallback system for robust loading across development and test environments:
+
+- Project root paths
+- Rebar3 test environment paths  
+- Application-relative paths
+- Filesystem traversal for priv directory discovery
+
+## Build System
+
+- **CMake**: C compilation with proper libsodium linking
+- **Rebar3**: Erlang compilation and test execution
+- **Make**: Unified build orchestration with NIF distribution
+
+## Memory Management
+
+- Secure memory clearing with `sodium_memzero()` for sensitive data
+- Proper EVP_PKEY lifecycle management
+- Error-safe resource cleanup
 
 ## Known Limitations
 
-- ARM64 architecture not supported (segfault issue)
-- AMD64 architecture required
-- NixOS/Nix environment required for builds
+- Linux x86_64 primary target (macOS supported)
+- NixOS/Nix environment required for reproducible builds
+- Test infrastructure has some rebar3 profile compilation issues
