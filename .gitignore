@@ -27,6 +27,11 @@ c_src/Makefile
 .#*
 \#*#
 
+# Configuration files (local overrides)
+config/local.config
+.env
+.env.local
+
 # Test artifacts
 test_*.erl
 simple_test.erl
