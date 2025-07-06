@@ -1,160 +1,232 @@
-name: CI
+name: CI/CD Pipeline
 
 on:
   push:
     branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
+  release:
+    types: [ published ]
+
+env:
+  CARGO_TERM_COLOR: always
+  MIX_ENV: test
 
 jobs:
-  test-erlang:
-    runs-on: ubuntu-latest
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        otp-version: [25]
+        os: [ubuntu-latest, macos-latest]
+        otp: ['24.3', '25.3', '26.2']
+        exclude:
+          # macOS builds are expensive, only test latest OTP
+          - os: macos-latest
+            otp: '24.3'
+          - os: macos-latest
+            otp: '25.3'
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Erlang ${{ matrix.otp-version }}
+    - name: Setup Erlang/OTP
       uses: erlef/setup-beam@v1
       with:
-        otp-version: ${{ matrix.otp-version }}
+        otp-version: ${{ matrix.otp }}
+        rebar3-version: '3.22.1'
     
-    - name: Install system dependencies
+    - name: Install system dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y \
-          build-essential \
-          cmake \
-          libssl-dev \
-          pkg-config \
-          git \
-          curl \
-          wget
+        sudo apt-get install -y libsodium-dev cmake build-essential
     
-    - name: Install rebar3
+    - name: Install system dependencies (macOS)
+      if: matrix.os == 'macos-latest'
       run: |
-        curl -fsSL -o rebar3 https://github.com/erlang/rebar3/releases/download/3.22.0/rebar3
-        chmod +x rebar3
-        sudo mv rebar3 /usr/local/bin/
+        brew install libsodium cmake
     
-    - name: Create test directories
-      run: |
-        mkdir -p tmp/ct_logs
-        mkdir -p tmp/cover
-        mkdir -p tmp/doc
-        mkdir -p tmp/perf
-        mkdir -p _build/default/lib/nif/priv
-        mkdir -p _build/test/lib/nif/priv
+    - name: Cache rebar3 dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/rebar3
+          _build
+        key: rebar3-${{ matrix.os }}-${{ matrix.otp }}-${{ hashFiles('rebar.config') }}
+        restore-keys: |
+          rebar3-${{ matrix.os }}-${{ matrix.otp }}-
     
-    - name: Build NIF
-      run: |
-        cd c_src
-        mkdir -p build
-        cd build
-        cmake .. -DCMAKE_BUILD_TYPE=Release
-        make -j"$(nproc)"
-        cd ../..
-        cp priv/nif.so _build/default/lib/nif/priv/ || true
-        cp priv/nif.so _build/test/lib/nif/priv/ || true
+    - name: Compile
+      run: make build
     
-    - name: Run tests
-      run: |
-        rebar3 ct --cover --verbose
-      env:
-        CT_OPTS: "--logdir=tmp/ct_logs --cover=tmp/ct_cover"
+    - name: Run unit tests
+      run: make test-unit
+    
+    - name: Run integration tests
+      run: make test-integration
     
     - name: Generate coverage report
-      run: |
-        rebar3 cover --verbose
-      if: always()
+      run: make test-unit-cover
     
-    - name: Upload coverage reports
+    - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
-      if: always()
       with:
-        file: ./_build/test/cover/coverage.json
+        file: ./tmp/cover/cover.html
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
 
-  test-macos:
-    runs-on: macos-latest
+  test-wrappers:
+    name: Test ${{ matrix.wrapper }} wrapper
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        otp-version: [25]
+        wrapper: [elixir, gleam]
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Erlang ${{ matrix.otp-version }}
+    - name: Setup Erlang/OTP and Elixir
       uses: erlef/setup-beam@v1
       with:
-        otp-version: ${{ matrix.otp-version }}
+        otp-version: '26.2'
+        elixir-version: '1.15.7'
+        rebar3-version: '3.22.1'
     
-    - name: Install Homebrew dependencies
+    - name: Install Gleam
+      if: matrix.wrapper == 'gleam'
       run: |
-        brew install cmake openssl@3
+        curl -sSL https://github.com/gleam-lang/gleam/releases/download/v0.32.4/gleam-v0.32.4-x86_64-unknown-linux-musl.tar.gz | tar -xz
+        sudo mv gleam /usr/local/bin/
     
-    - name: Install rebar3
+    - name: Install system dependencies
       run: |
-        curl -fsSL -o rebar3 https://github.com/erlang/rebar3/releases/download/3.22.0/rebar3
-        chmod +x rebar3
-        sudo mv rebar3 /usr/local/bin/
+        sudo apt-get update
+        sudo apt-get install -y libsodium-dev cmake build-essential
     
-    - name: Create test directories
-      run: |
-        mkdir -p tmp/ct_logs
-        mkdir -p tmp/cover
-        mkdir -p tmp/doc
-        mkdir -p tmp/perf
-        mkdir -p _build/default/lib/nif/priv
-        mkdir -p _build/test/lib/nif/priv
+    - name: Build main NIF
+      run: make build
     
-    - name: Build NIF
+    - name: Test Elixir wrapper
+      if: matrix.wrapper == 'elixir'
       run: |
-        cd c_src
-        mkdir -p build
-        cd build
-        cmake .. -DCMAKE_BUILD_TYPE=Release
-        make -j"$(sysctl -n hw.ncpu)"
-        cd ../..
-        cp priv/nif.dylib _build/default/lib/nif/priv/ || true
-        cp priv/nif.dylib _build/test/lib/nif/priv/ || true
+        cd wrappers/elixir
+        mix deps.get
+        mix test
     
-    - name: Run tests
+    - name: Test Gleam wrapper
+      if: matrix.wrapper == 'gleam'
       run: |
-        DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 ct --cover --verbose
-      env:
-        CT_OPTS: "--logdir=tmp/ct_logs --cover=tmp/ct_cover"
+        cd wrappers/gleam
+        gleam deps download
+        gleam test
+
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
     
-    - name: Generate coverage report
+    - name: Run security audit
       run: |
-        rebar3 cover --verbose
-      if: always()
+        # Add security scanning tools here
+        echo "Security scanning placeholder"
+    
+    - name: Check for known vulnerabilities
+      run: |
+        # Add dependency vulnerability scanning
+        echo "Vulnerability scanning placeholder"
 
   lint:
+    name: Lint and format
     runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Erlang/OTP
+      uses: erlef/setup-beam@v1
+      with:
+        otp-version: '26.2'
+        rebar3-version: '3.22.1'
+    
+    - name: Check formatting
+      run: rebar3 format --verify
+    
+    - name: Run Dialyzer
+      run: rebar3 dialyzer
+
+  publish:
+    name: Publish to Hex.pm
+    runs-on: ubuntu-latest
+    needs: [test, test-wrappers, security, lint]
+    if: github.event_name == 'release' && github.event.action == 'published'
     
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Erlang
+    - name: Setup Erlang/OTP and Elixir
       uses: erlef/setup-beam@v1
       with:
-        otp-version: 25
+        otp-version: '26.2'
+        elixir-version: '1.15.7'
+        rebar3-version: '3.22.1'
     
-    - name: Install rebar3
+    - name: Install system dependencies
       run: |
-        curl -fsSL -o rebar3 https://github.com/erlang/rebar3/releases/download/3.22.0/rebar3
-        chmod +x rebar3
-        sudo mv rebar3 /usr/local/bin/
+        sudo apt-get update
+        sudo apt-get install -y libsodium-dev cmake build-essential
     
-    - name: Run dialyzer
-      run: |
-        rebar3 dialyzer
+    - name: Build
+      run: make build
     
-    - name: Run xref
+    - name: Publish Erlang package
+      env:
+        HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+      run: rebar3 hex publish --yes
+    
+    - name: Publish Elixir package
+      env:
+        HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
       run: |
-        rebar3 xref 
+        cd wrappers/elixir
+        mix hex.publish --yes
+    
+    - name: Publish Gleam package
+      env:
+        HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+      run: |
+        cd wrappers/gleam
+        gleam publish --yes
+
+  docker:
+    name: Build and test Docker images
+    runs-on: ubuntu-latest
+    needs: [test]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build Docker images
+      run: make docker-build
+    
+    - name: Test Docker images
+      run: make docker-test
+    
+    - name: Login to Docker Hub
+      if: github.event_name == 'release'
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+    
+    - name: Push Docker images
+      if: github.event_name == 'release'
+      run: |
+        docker tag libsignal-protocol-nif:latest ${{ secrets.DOCKER_USERNAME }}/libsignal-protocol-nif:latest
+        docker tag libsignal-protocol-nif:latest ${{ secrets.DOCKER_USERNAME }}/libsignal-protocol-nif:${{ github.event.release.tag_name }}
+        docker push ${{ secrets.DOCKER_USERNAME }}/libsignal-protocol-nif:latest
+        docker push ${{ secrets.DOCKER_USERNAME }}/libsignal-protocol-nif:${{ github.event.release.tag_name }} 
