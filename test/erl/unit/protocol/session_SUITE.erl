@@ -50,15 +50,9 @@ test_new_session(_Config) ->
 test_process_pre_key_bundle(_Config) ->
     % Generate test keys
     {ok, {LocalPublic, LocalPrivate}} = signal_crypto:generate_key_pair(),
-    file:write_file("/tmp/signal_test_debug.log", "Generated LocalPublic key\n", [append]),
     {ok, {RemotePublic, RemotePrivate}} = signal_crypto:generate_key_pair(),
-    file:write_file("/tmp/signal_test_debug.log", "Generated RemotePublic key\n", [append]),
     {ok, {PreKeyPublic, PreKeyPrivate}} = signal_crypto:generate_key_pair(),
-    file:write_file("/tmp/signal_test_debug.log", "Generated PreKeyPublic key\n", [append]),
     {ok, {SignedPreKeyPublic, SignedPreKeyPrivate}} = signal_crypto:generate_key_pair(),
-    file:write_file("/tmp/signal_test_debug.log",
-                    "Generated SignedPreKeyPublic key\n",
-                    [append]),
 
     % Create pre-key bundle
     PreKeyId = 1,
@@ -71,7 +65,6 @@ test_process_pre_key_bundle(_Config) ->
     io:format("SignedPreKeyPublic: ~p (~p bytes)~n",
               [SignedPreKeyPublic32, byte_size(SignedPreKeyPublic32)]),
     {ok, Signature} = signal_crypto:sign(RemotePublic32, SignedPreKeyPublic32),
-    file:write_file("/tmp/signal_test_debug.log", "Generated signature\n", [append]),
 
     Bundle =
         {RegistrationId,
@@ -82,9 +75,7 @@ test_process_pre_key_bundle(_Config) ->
 
     % Create session and process bundle
     Session = signal_session:new(LocalPublic, RemotePublic),
-    file:write_file("/tmp/signal_test_debug.log", "Created session\n", [append]),
     {ok, UpdatedSession} = signal_session:process_pre_key_bundle(Session, Bundle),
-    file:write_file("/tmp/signal_test_debug.log", "Processed bundle\n", [append]),
 
     % Verify updated session
     ?assertEqual(PreKeyId, maps:get(pre_key_id, UpdatedSession)),
@@ -93,20 +84,11 @@ test_process_pre_key_bundle(_Config) ->
     ?assert(is_binary(maps:get(chain_key, UpdatedSession))).
 
 test_encrypt_decrypt_message(_Config) ->
-    file:write_file("/tmp/signal_test_debug.log",
-                    "test_encrypt_decrypt_message: starting\n",
-                    [append]),
     % Generate test keys
     {ok, {LocalPublic, LocalPrivate}} = signal_crypto:generate_key_pair(),
-    file:write_file("/tmp/signal_test_debug.log", "Generated LocalPublic key\n", [append]),
     {ok, {RemotePublic, RemotePrivate}} = signal_crypto:generate_key_pair(),
-    file:write_file("/tmp/signal_test_debug.log", "Generated RemotePublic key\n", [append]),
     {ok, {PreKeyPublic, PreKeyPrivate}} = signal_crypto:generate_key_pair(),
-    file:write_file("/tmp/signal_test_debug.log", "Generated PreKeyPublic key\n", [append]),
     {ok, {SignedPreKeyPublic, SignedPreKeyPrivate}} = signal_crypto:generate_key_pair(),
-    file:write_file("/tmp/signal_test_debug.log",
-                    "Generated SignedPreKeyPublic key\n",
-                    [append]),
 
     % Create pre-key bundle
     PreKeyId = 1,

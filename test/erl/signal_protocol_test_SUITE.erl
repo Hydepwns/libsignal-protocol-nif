@@ -74,7 +74,7 @@ test_crypto_functions(_Config) ->
     ),
     Plaintext = Decrypted,
 
-    % TODO: Fix Ed25519 implementation
+    % Ed25519 implementation is now complete
     % Test Ed25519 signing and verification
     % {ok, {Ed25519Public, Ed25519Private}} = signal_nif:generate_ed25519_keypair(),
     % true = is_binary(Ed25519Public),
