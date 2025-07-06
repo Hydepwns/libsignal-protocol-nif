@@ -21,6 +21,22 @@
 
 -on_load(load_nif/0).
 
+% Suppress Dialyzer warnings for intentionally unused fallback functions
+-dialyzer({nowarn_function, [
+    init_fallback/0,
+    generate_identity_key_pair_fallback/0,
+    generate_pre_key_fallback/1,
+    generate_signed_pre_key_fallback/2,
+    create_session_fallback/1,
+    create_session_fallback/2,
+    process_pre_key_bundle_fallback/2,
+    encrypt_message_fallback/2,
+    decrypt_message_fallback/2,
+    get_cache_stats_fallback/1,
+    reset_cache_stats_fallback/1,
+    set_cache_size_fallback/3
+]}).
+
 %% NIF loading functions
 load_nif() ->
     Paths = ["../priv/libsignal_protocol_nif", "priv/libsignal_protocol_nif", "./priv/libsignal_protocol_nif"],
