@@ -69,15 +69,11 @@ int validate_private_key(const unsigned char *key_data, size_t key_len)
 int generate_ec_key_pair(EVP_PKEY **key)
 {
   EVP_PKEY *public_key = NULL, *private_key = NULL;
-  fprintf(stderr, "[NIF DEBUG] generate_ec_key_pair: calling curve25519_generate_keypair\n");
-
   // Use Curve25519 instead of P-256
   curve25519_key_t pub_key, priv_key;
   crypto_error_t result = curve25519_generate_keypair(&pub_key, &priv_key);
-  fprintf(stderr, "[NIF DEBUG] generate_ec_key_pair: curve25519_generate_keypair result = %d\n", result);
   if (result != CRYPTO_OK)
   {
-    fprintf(stderr, "[NIF DEBUG] generate_ec_key_pair: key generation failed\n");
     return 0;
   }
 
@@ -85,30 +81,24 @@ int generate_ec_key_pair(EVP_PKEY **key)
   EVP_PKEY *pkey = EVP_PKEY_new_raw_private_key(EVP_PKEY_X25519, NULL, priv_key.key, CURVE25519_KEY_SIZE);
   if (!pkey)
   {
-    fprintf(stderr, "[NIF DEBUG] generate_ec_key_pair: failed to create EVP_PKEY\n");
     return 0;
   }
 
   *key = pkey;
-  fprintf(stderr, "[NIF DEBUG] generate_ec_key_pair: key generation succeeded\n");
   return 1;
 }
 
 static int generate_ed25519_keypair_internal(EVP_PKEY **key)
 {
-  fprintf(stderr, "[NIF DEBUG] generate_ed25519_key_pair: generating Ed25519 key pair\n");
-
   // Create EVP_PKEY context for Ed25519 key generation
   EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_id(EVP_PKEY_ED25519, NULL);
   if (!pctx)
   {
-    fprintf(stderr, "[NIF DEBUG] generate_ed25519_key_pair: failed to create context\n");
     return 0;
   }
 
   if (EVP_PKEY_keygen_init(pctx) <= 0)
   {
-    fprintf(stderr, "[NIF DEBUG] generate_ed25519_key_pair: failed to init keygen\n");
     EVP_PKEY_CTX_free(pctx);
     return 0;
   }
@@ -116,14 +106,12 @@ static int generate_ed25519_keypair_internal(EVP_PKEY **key)
   EVP_PKEY *pkey = NULL;
   if (EVP_PKEY_keygen(pctx, &pkey) <= 0)
   {
-    fprintf(stderr, "[NIF DEBUG] generate_ed25519_key_pair: failed to generate key\n");
     EVP_PKEY_CTX_free(pctx);
     return 0;
   }
 
   EVP_PKEY_CTX_free(pctx);
   *key = pkey;
-  fprintf(stderr, "[NIF DEBUG] generate_ed25519_key_pair: key generation succeeded\n");
   return 1;
 }
 
@@ -140,11 +128,9 @@ ERL_NIF_TERM key_to_binary(ErlNifEnv *env, EVP_PKEY *key, int is_public)
       // For Curve25519 public key, extract raw public key
       uint8_t buffer[CURVE25519_KEY_SIZE];
       size_t buffer_len = sizeof(buffer);
-      fprintf(stderr, "[NIF DEBUG] key_to_binary: serializing Curve25519 public key\n");
 
       if (EVP_PKEY_get_raw_public_key(key, buffer, &buffer_len) <= 0 || buffer_len != CURVE25519_KEY_SIZE)
       {
-        fprintf(stderr, "[NIF DEBUG] key_to_binary: failed to get raw public key\n");
         return make_error(env, "Failed to serialize public key");
       }
 
@@ -155,11 +141,9 @@ ERL_NIF_TERM key_to_binary(ErlNifEnv *env, EVP_PKEY *key, int is_public)
       // For Curve25519 private key, extract raw private key
       uint8_t buffer[CURVE25519_KEY_SIZE];
       size_t buffer_len = sizeof(buffer);
-      fprintf(stderr, "[NIF DEBUG] key_to_binary: serializing Curve25519 private key\n");
 
       if (EVP_PKEY_get_raw_private_key(key, buffer, &buffer_len) <= 0 || buffer_len != CURVE25519_KEY_SIZE)
       {
-        fprintf(stderr, "[NIF DEBUG] key_to_binary: failed to get raw private key\n");
         return make_error(env, "Failed to serialize private key");
       }
 
@@ -174,11 +158,9 @@ ERL_NIF_TERM key_to_binary(ErlNifEnv *env, EVP_PKEY *key, int is_public)
       // For Ed25519 public key, extract raw public key
       uint8_t buffer[CURVE25519_KEY_SIZE];
       size_t buffer_len = sizeof(buffer);
-      fprintf(stderr, "[NIF DEBUG] key_to_binary: serializing Ed25519 public key\n");
 
       if (EVP_PKEY_get_raw_public_key(key, buffer, &buffer_len) <= 0 || buffer_len != CURVE25519_KEY_SIZE)
       {
-        fprintf(stderr, "[NIF DEBUG] key_to_binary: failed to get raw Ed25519 public key\n");
         return make_error(env, "Failed to serialize Ed25519 public key");
       }
 
@@ -193,17 +175,14 @@ ERL_NIF_TERM key_to_binary(ErlNifEnv *env, EVP_PKEY *key, int is_public)
       uint8_t combined_buffer[CURVE25519_KEY_SIZE * 2]; // 64 bytes
       size_t private_len = sizeof(private_buffer);
       size_t public_len = sizeof(public_buffer);
-      fprintf(stderr, "[NIF DEBUG] key_to_binary: serializing Ed25519 private key (64-byte format)\n");
 
       if (EVP_PKEY_get_raw_private_key(key, private_buffer, &private_len) <= 0 || private_len != CURVE25519_KEY_SIZE)
       {
-        fprintf(stderr, "[NIF DEBUG] key_to_binary: failed to get raw Ed25519 private key\n");
         return make_error(env, "Failed to serialize Ed25519 private key");
       }
 
       if (EVP_PKEY_get_raw_public_key(key, public_buffer, &public_len) <= 0 || public_len != CURVE25519_KEY_SIZE)
       {
-        fprintf(stderr, "[NIF DEBUG] key_to_binary: failed to get raw Ed25519 public key\n");
         return make_error(env, "Failed to serialize Ed25519 public key");
       }
 
@@ -216,7 +195,6 @@ ERL_NIF_TERM key_to_binary(ErlNifEnv *env, EVP_PKEY *key, int is_public)
   }
   else
   {
-    fprintf(stderr, "[NIF DEBUG] key_to_binary: unsupported key type %d\n", key_type);
     return make_error(env, "Unsupported key type");
   }
 }

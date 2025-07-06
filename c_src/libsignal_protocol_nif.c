@@ -318,7 +318,7 @@ static ERL_NIF_TERM create_session_2(ErlNifEnv *env, int argc, const ERL_NIF_TER
     return enif_make_tuple2(env, enif_make_atom(env, "ok"), session_term);
 }
 
-// Simple test function for debugging NIF loading issues
+// Simple test function for NIF loading verification
 static ERL_NIF_TERM dr_test_simple(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     if (argc != 3) {
@@ -328,7 +328,7 @@ static ERL_NIF_TERM dr_test_simple(ErlNifEnv *env, int argc, const ERL_NIF_TERM 
     return enif_make_tuple2(env, enif_make_atom(env, "ok"), enif_make_atom(env, "dr_test_works"));
 }
 
-// Test version of init_double_ratchet - simplified for debugging
+// Test version of init_double_ratchet - simplified for testing
 static ERL_NIF_TERM init_double_ratchet_test(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     if (argc != 2) {
