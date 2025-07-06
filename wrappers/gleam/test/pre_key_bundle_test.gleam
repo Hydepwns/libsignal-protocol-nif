@@ -19,7 +19,7 @@ pub fn test_create_bundle() {
                 identity_key_pair.public_key,
                 pre_key,
                 signed_pre_key,
-                <<0:256>>,
+                "base_key_placeholder",
               ) {
                 Ok(_bundle) -> should.equal(True, True)
                 Error(e) -> should.fail("Failed to create bundle: " <> e)

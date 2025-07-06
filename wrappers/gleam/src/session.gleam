@@ -1,27 +1,27 @@
 import gleam/int
 import signal_protocol.{type PreKeyBundle, type Session, Session}
 
-// --- FFI: Elixir.SignalProtocol.Session integration ---
-@external(erlang, "Elixir.SignalProtocol.Session", "create")
-fn call_elixir_session_create(
+// --- FFI: libsignal_protocol_nif integration ---
+@external(erlang, "libsignal_protocol_nif", "create_session")
+fn call_nif_create_session(
   local_key: String,
   remote_key: String,
 ) -> Result(String, String)
 
-@external(erlang, "Elixir.SignalProtocol.Session", "process_pre_key_bundle")
-fn call_elixir_process_bundle(
+@external(erlang, "libsignal_protocol_nif", "process_pre_key_bundle")
+fn call_nif_process_bundle(
   session_ref: String,
   bundle: String,
 ) -> Result(Nil, String)
 
-@external(erlang, "Elixir.SignalProtocol.Session", "encrypt_message")
-fn call_elixir_encrypt(
+@external(erlang, "libsignal_protocol_nif", "encrypt_message")
+fn call_nif_encrypt(
   session_ref: String,
   message: String,
 ) -> Result(String, String)
 
-@external(erlang, "Elixir.SignalProtocol.Session", "decrypt_message")
-fn call_elixir_decrypt(
+@external(erlang, "libsignal_protocol_nif", "decrypt_message")
+fn call_nif_decrypt(
   session_ref: String,
   ciphertext: String,
 ) -> Result(String, String)
@@ -31,7 +31,7 @@ pub fn create(
   local_identity_key: String,
   remote_identity_key: String,
 ) -> Result(Session, String) {
-  case call_elixir_session_create(local_identity_key, remote_identity_key) {
+  case call_nif_create_session(local_identity_key, remote_identity_key) {
     Ok(reference) -> Ok(Session(reference))
     Error(reason) -> Error(reason)
   }
@@ -43,7 +43,7 @@ pub fn process_pre_key_bundle(
   bundle: PreKeyBundle,
 ) -> Result(Nil, String) {
   let bundle_binary = create_bundle_binary(bundle)
-  case call_elixir_process_bundle(session_reference(session), bundle_binary) {
+  case call_nif_process_bundle(session_reference(session), bundle_binary) {
     Ok(Nil) -> Ok(Nil)
     Error(reason) -> Error(reason)
   }
@@ -54,7 +54,7 @@ pub fn encrypt_message(
   session: Session,
   message: String,
 ) -> Result(String, String) {
-  call_elixir_encrypt(session_reference(session), message)
+  call_nif_encrypt(session_reference(session), message)
 }
 
 /// Decrypts a message using the given session.
@@ -62,7 +62,7 @@ pub fn decrypt_message(
   session: Session,
   ciphertext: String,
 ) -> Result(String, String) {
-  call_elixir_decrypt(session_reference(session), ciphertext)
+  call_nif_decrypt(session_reference(session), ciphertext)
 }
 
 /// Creates a new session and processes a pre-key bundle in one step.
