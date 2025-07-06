@@ -7,6 +7,7 @@ pkgs.mkShell {
     gcc
     gdb
     libsodium
+    pkg-config
   ];
   
   shellHook = ''

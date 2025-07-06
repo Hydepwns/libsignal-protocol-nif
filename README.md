@@ -1,4 +1,4 @@
-# 🔐 libsignal-protocol-nif
+# libsignal-protocol-nif
 
 > **High-performance Signal Protocol cryptographic primitives for the BEAM ecosystem**
 
@@ -12,7 +12,7 @@ A native Erlang NIF (Native Implemented Function) library that provides Signal P
 
 ---
 
-## 🚀 **Quick Start**
+## Quick Start
 
 **Get up and running in 30 seconds:**
 
@@ -29,7 +29,7 @@ nix-shell --run "make test-unit"
 **Add to your project:**
 
 <details>
-<summary><strong>📦 Erlang (rebar.config)</strong></summary>
+<summary><strong>Erlang (rebar.config)</strong></summary>
 
 ```erlang
 {deps, [
@@ -40,7 +40,7 @@ nix-shell --run "make test-unit"
 </details>
 
 <details>
-<summary><strong>💧 Elixir (mix.exs)</strong></summary>
+<summary><strong>Elixir (mix.exs)</strong></summary>
 
 ```elixir
 def deps do
@@ -53,7 +53,7 @@ end
 </details>
 
 <details>
-<summary><strong>✨ Gleam (gleam.toml)</strong></summary>
+<summary><strong>Gleam (gleam.toml)</strong></summary>
 
 ```toml
 [dependencies]
@@ -64,23 +64,23 @@ libsignal_protocol_gleam = "~> 0.1.0"
 
 ---
 
-## 📋 **What's Included**
+## What's Included
 
-### ✅ **Cryptographic Primitives**
+### Cryptographic Primitives
 
-- **🔑 Key Generation**: Curve25519 (ECDH) and Ed25519 (signatures)
-- **✍️ Digital Signatures**: Ed25519 signing and verification
-- **🔒 Encryption**: AES-GCM authenticated encryption
-- **🔐 Hashing**: SHA-256, SHA-512, HMAC-SHA256
-- **🛡️ Memory Safety**: Secure memory clearing with `sodium_memzero()`
+- **Key Generation**: Curve25519 (ECDH) and Ed25519 (signatures)
+- **Digital Signatures**: Ed25519 signing and verification
+- **Encryption**: AES-GCM authenticated encryption
+- **Hashing**: SHA-256, SHA-512, HMAC-SHA256
+- **Memory Safety**: Secure memory clearing with `sodium_memzero()`
 
-### 🌐 **Multi-Language Support**
+### Multi-Language Support
 
 - **Erlang/OTP**: Native NIF implementation
 - **Elixir**: Idiomatic Elixir wrapper
 - **Gleam**: Type-safe functional wrapper
 
-### 🏗️ **Production Ready**
+### Production Ready
 
 - **High Performance**: Native C implementation with libsodium
 - **Memory Efficient**: Minimal overhead, secure memory management
@@ -89,7 +89,7 @@ libsignal_protocol_gleam = "~> 0.1.0"
 
 ---
 
-## 🛠️ **Installation**
+## Installation
 
 ### System Requirements
 
@@ -103,7 +103,7 @@ libsignal_protocol_gleam = "~> 0.1.0"
 ### Platform-Specific Setup
 
 <details>
-<summary><strong>🐧 Ubuntu/Debian</strong></summary>
+<summary><strong>Ubuntu/Debian</strong></summary>
 
 ```bash
 sudo apt-get update
@@ -113,7 +113,7 @@ sudo apt-get install libsodium-dev cmake build-essential
 </details>
 
 <details>
-<summary><strong>🍎 macOS</strong></summary>
+<summary><strong>macOS</strong></summary>
 
 ```bash
 brew install libsodium cmake
@@ -122,7 +122,7 @@ brew install libsodium cmake
 </details>
 
 <details>
-<summary><strong>❄️ Nix (Recommended)</strong></summary>
+<summary><strong>Nix (Recommended)</strong></summary>
 
 ```bash
 nix-shell  # All dependencies included automatically
@@ -132,7 +132,7 @@ nix-shell  # All dependencies included automatically
 
 ---
 
-## 💡 **Usage Examples**
+## Usage Examples
 
 ### Basic Cryptographic Operations
 
@@ -160,7 +160,7 @@ IV = crypto:strong_rand_bytes(12),
 ### Language-Specific Examples
 
 <details>
-<summary><strong>💧 Elixir</strong></summary>
+<summary><strong>Elixir</strong></summary>
 
 ```elixir
 # Generate keys
@@ -175,7 +175,7 @@ message = "Hello from Elixir!"
 </details>
 
 <details>
-<summary><strong>✨ Gleam</strong></summary>
+<summary><strong>Gleam</strong></summary>
 
 ```gleam
 import signal_protocol
@@ -193,7 +193,7 @@ let assert Ok(Nil) = signal_protocol.verify(public_key, message, signature)
 
 ---
 
-## 🔧 **Development**
+## Development
 
 ### Building from Source
 
@@ -222,25 +222,25 @@ make docker-test
 
 ---
 
-## 📚 **Documentation**
+## Documentation
 
 | Resource | Description |
 |----------|-------------|
-| [🚀 Quick Start Guide](docs/IMMEDIATE_ACTIONS.md) | Get started in 5 minutes |
-| [📖 API Reference](docs/API.md) | Complete function documentation |
-| [🏗️ Architecture](docs/ARCHITECTURE.md) | System design and internals |
-| [🔒 Security Guide](docs/SECURITY.md) | Cryptographic security considerations |
-| [🌐 Language Comparison](docs/CROSS_LANGUAGE_COMPARISON.md) | Erlang vs Elixir vs Gleam |
-| [📋 Documentation Plan](docs/DOCUMENTATION_PLAN.md) | Comprehensive roadmap |
+| [Quick Start Guide](docs/IMMEDIATE_ACTIONS.md) | Get started in 5 minutes |
+| [API Reference](docs/API.md) | Complete function documentation |
+| [Architecture](docs/ARCHITECTURE.md) | System design and internals |
+| [Security Guide](docs/SECURITY.md) | Cryptographic security considerations |
+| [Language Comparison](docs/CROSS_LANGUAGE_COMPARISON.md) | Erlang vs Elixir vs Gleam |
+| [Documentation Plan](docs/DOCUMENTATION_PLAN.md) | Comprehensive roadmap |
 
 ---
 
-## 🐛 **Troubleshooting**
+## Troubleshooting
 
 ### Common Issues
 
 <details>
-<summary><strong>❌ Build Errors</strong></summary>
+<summary><strong>Build Errors</strong></summary>
 
 **`fatal error: sodium.h: No such file or directory`**
 
@@ -261,7 +261,7 @@ brew install cmake           # macOS
 </details>
 
 <details>
-<summary><strong>🔄 Runtime Errors</strong></summary>
+<summary><strong>Runtime Errors</strong></summary>
 
 **`{error, {load_failed, "Failed to load NIF library"}}`**
 
@@ -282,7 +282,7 @@ export DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib
 </details>
 
 <details>
-<summary><strong>⚡ Performance Issues</strong></summary>
+<summary><strong>Performance Issues</strong></summary>
 
 - **Slow builds**: Use `make -j$(nproc)` for parallel compilation
 - **Memory monitoring**: Run `make monitor-memory` during tests
@@ -292,16 +292,16 @@ export DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib
 
 ---
 
-## 🆘 **Getting Help**
+## Getting Help
 
-- 📖 **Quick fixes**: [docs/IMMEDIATE_ACTIONS.md](docs/IMMEDIATE_ACTIONS.md)
-- 🐛 **Bug reports**: [GitHub Issues](https://github.com/Hydepwns/libsignal-protocol-nif/issues)
-- 💬 **Questions**: [GitHub Discussions](https://github.com/Hydepwns/libsignal-protocol-nif/discussions)
-- 🔒 **Security**: [docs/SECURITY.md](docs/SECURITY.md)
+- **Quick fixes**: [docs/IMMEDIATE_ACTIONS.md](docs/IMMEDIATE_ACTIONS.md)
+- **Bug reports**: [GitHub Issues](https://github.com/Hydepwns/libsignal-protocol-nif/issues)
+- **Questions**: [GitHub Discussions](https://github.com/Hydepwns/libsignal-protocol-nif/discussions)
+- **Security**: [docs/SECURITY.md](docs/SECURITY.md)
 
 ---
 
-## 🏗️ **Technical Details**
+## Technical Details
 
 ### Implementation
 
@@ -326,23 +326,23 @@ export DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib
 
 ---
 
-## 📄 **License**
+## License
 
 This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 
 ---
 
-## 🙏 **Contributing**
+## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 **Key Areas:**
 
-- 🐛 Bug fixes and improvements
-- 📚 Documentation enhancements
-- 🧪 Additional test coverage
-- 🌐 New language wrappers
-- ⚡ Performance optimizations
+- Bug fixes and improvements
+- Documentation enhancements
+- Additional test coverage
+- New language wrappers
+- Performance optimizations
 
 ---
 
@@ -350,6 +350,6 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 **Made with ❤️ for the BEAM ecosystem**
 
-[⭐ Star this project](https://github.com/Hydepwns/libsignal-protocol-nif) • [🐛 Report Issues](https://github.com/Hydepwns/libsignal-protocol-nif/issues) • [💬 Discussions](https://github.com/Hydepwns/libsignal-protocol-nif/discussions)
+[⭐ Star this project](https://github.com/Hydepwns/libsignal-protocol-nif) • [Report Issues](https://github.com/Hydepwns/libsignal-protocol-nif/issues) • [Discussions](https://github.com/Hydepwns/libsignal-protocol-nif/discussions)
 
 </div>

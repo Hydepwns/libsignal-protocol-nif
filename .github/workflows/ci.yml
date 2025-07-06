@@ -40,12 +40,18 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsodium-dev cmake build-essential
+        sudo apt-get install -y libsodium-dev cmake build-essential pkg-config
+        # Verify installations
+        cmake --version
+        pkg-config --exists libsodium && echo "libsodium found" || echo "libsodium not found"
     
     - name: Install system dependencies (macOS)
       if: matrix.os == 'macos-latest'
       run: |
-        brew install libsodium cmake
+        brew install libsodium cmake pkg-config
+        # Verify installations
+        cmake --version
+        pkg-config --exists libsodium && echo "libsodium found" || echo "libsodium not found"
     
     - name: Cache rebar3 dependencies
       uses: actions/cache@v3
@@ -57,17 +63,39 @@ jobs:
         restore-keys: |
           rebar3-${{ matrix.os }}-${{ matrix.otp }}-
     
-    - name: Compile
-      run: make build
+    - name: Clean previous builds
+      run: |
+        make clean
+        rm -rf _build
+    
+    - name: Build C components first
+      run: |
+        echo "Building C components..."
+        cd c_src
+        cmake . -DCMAKE_BUILD_TYPE=Release
+        make
+        cd ..
+        ls -la priv/
+    
+    - name: Compile Erlang components
+      run: |
+        echo "Compiling Erlang components..."
+        rebar3 compile
     
     - name: Run unit tests
-      run: make test-unit
+      run: |
+        echo "Running unit tests..."
+        make test-unit
     
     - name: Run integration tests
-      run: make test-integration
+      run: |
+        echo "Running integration tests..."
+        make test-integration
     
     - name: Generate coverage report
-      run: make test-unit-cover
+      run: |
+        echo "Generating coverage report..."
+        make test-unit-cover
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -99,20 +127,31 @@ jobs:
       run: |
         curl -sSL https://github.com/gleam-lang/gleam/releases/download/v0.32.4/gleam-v0.32.4-x86_64-unknown-linux-musl.tar.gz | tar -xz
         sudo mv gleam /usr/local/bin/
+        gleam --version
     
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsodium-dev cmake build-essential
+        sudo apt-get install -y libsodium-dev cmake build-essential pkg-config
+        # Verify installations
+        cmake --version
+        pkg-config --exists libsodium && echo "libsodium found" || echo "libsodium not found"
     
     - name: Build main NIF
-      run: make build
+      run: |
+        echo "Building main NIF..."
+        cd c_src
+        cmake . -DCMAKE_BUILD_TYPE=Release
+        make
+        cd ..
+        ls -la priv/
     
     - name: Test Elixir wrapper
       if: matrix.wrapper == 'elixir'
       run: |
         cd wrappers/elixir
         mix deps.get
+        mix compile
         mix test
     
     - name: Test Gleam wrapper
@@ -120,6 +159,7 @@ jobs:
       run: |
         cd wrappers/gleam
         gleam deps download
+        gleam build
         gleam test
 
   security:
@@ -128,15 +168,19 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Run security audit
-      run: |
-        # Add security scanning tools here
-        echo "Security scanning placeholder"
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
     
-    - name: Check for known vulnerabilities
-      run: |
-        # Add dependency vulnerability scanning
-        echo "Vulnerability scanning placeholder"
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
 
   lint:
     name: Lint and format
@@ -149,6 +193,21 @@ jobs:
       with:
         otp-version: '26.2'
         rebar3-version: '3.22.1'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libsodium-dev cmake build-essential pkg-config
+    
+    - name: Build C components for linting
+      run: |
+        cd c_src
+        cmake . -DCMAKE_BUILD_TYPE=Release
+        make
+        cd ..
+    
+    - name: Compile Erlang for linting
+      run: rebar3 compile
     
     - name: Check formatting
       run: rebar3 format --verify
@@ -175,10 +234,17 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsodium-dev cmake build-essential
+        sudo apt-get install -y libsodium-dev cmake build-essential pkg-config
     
-    - name: Build
-      run: make build
+    - name: Build C components
+      run: |
+        cd c_src
+        cmake . -DCMAKE_BUILD_TYPE=Release
+        make
+        cd ..
+    
+    - name: Compile Erlang
+      run: rebar3 compile
     
     - name: Publish Erlang package
       env:
@@ -190,6 +256,7 @@ jobs:
         HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
       run: |
         cd wrappers/elixir
+        mix deps.get
         mix hex.publish --yes
     
     - name: Publish Gleam package
@@ -197,6 +264,7 @@ jobs:
         HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
       run: |
         cd wrappers/gleam
+        gleam deps download
         gleam publish --yes
 
   docker:

@@ -5,11 +5,18 @@ project(signal_nif C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Find libsodium
-find_library(SODIUM_LIBRARY sodium REQUIRED)
-if(NOT SODIUM_LIBRARY)
-    message(FATAL_ERROR "libsodium not found")
+# Find libsodium with better error handling
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SODIUM REQUIRED libsodium)
+
+if(NOT SODIUM_FOUND)
+    message(FATAL_ERROR "libsodium not found. Please install libsodium-dev (Ubuntu/Debian) or libsodium (macOS)")
 endif()
+
+# Use pkg-config results
+include_directories(${SODIUM_INCLUDE_DIRS})
+link_directories(${SODIUM_LIBRARY_DIRS})
+set(SODIUM_LIBRARIES ${SODIUM_LIBRARIES})
 
 # Detect Erlang include directory automatically
 execute_process(
@@ -43,19 +50,19 @@ add_library(libsignal_protocol_nif_v2 SHARED
 )
 
 # Link libsodium to all libraries
-target_link_libraries(signal_nif ${SODIUM_LIBRARY})
-target_link_libraries(libsignal_protocol_nif ${SODIUM_LIBRARY})
-target_link_libraries(libsignal_protocol_nif_v2 ${SODIUM_LIBRARY})
+target_link_libraries(signal_nif ${SODIUM_LIBRARIES})
+target_link_libraries(libsignal_protocol_nif ${SODIUM_LIBRARIES})
+target_link_libraries(libsignal_protocol_nif_v2 ${SODIUM_LIBRARIES})
 
 # Remove explicit erl_nif linking; use dynamic lookup on macOS
 if(APPLE)
     foreach(target signal_nif libsignal_protocol_nif libsignal_protocol_nif_v2)
-        target_link_libraries(${target} ${SODIUM_LIBRARY})
+        target_link_libraries(${target} ${SODIUM_LIBRARIES})
         target_link_options(${target} PRIVATE "-undefined" "dynamic_lookup")
     endforeach()
 else()
     foreach(target signal_nif libsignal_protocol_nif libsignal_protocol_nif_v2)
-        target_link_libraries(${target} ${SODIUM_LIBRARY})
+        target_link_libraries(${target} ${SODIUM_LIBRARIES})
     endforeach()
 endif()
 

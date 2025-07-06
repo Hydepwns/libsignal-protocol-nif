@@ -53,7 +53,13 @@ check-project-root:
 
 build: check-project-root $(BUILD_DIR)
 	@echo "Building Signal Protocol NIF..."
-	cd c_src && cmake . && make
+	# Check for required dependencies
+	@which cmake > /dev/null || (echo "ERROR: cmake not found. Please install cmake." && exit 1)
+	@pkg-config --exists libsodium || (echo "ERROR: libsodium not found. Please install libsodium-dev." && exit 1)
+	# Build C components
+	cd c_src && cmake . -DCMAKE_BUILD_TYPE=Release && make
+	# Verify NIF files were created
+	@ls -la priv/ || (echo "ERROR: NIF files not created in priv/ directory" && exit 1)
 	# Copy NIF to all relevant test and default profile priv directories
 	mkdir -p _build/default/lib/nif/priv
 	mkdir -p _build/test/lib/nif/priv
