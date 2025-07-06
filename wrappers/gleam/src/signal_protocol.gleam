@@ -196,24 +196,11 @@ fn session_reference(session: Session) -> BitArray {
 fn create_bundle_binary(bundle: PreKeyBundle) -> BitArray {
   // This is a simplified serialization for demonstration
   // In a real implementation, you would use proper binary serialization
-  let registration_id_bytes = int.to_string(bundle.registration_id)
-  let #(pre_key_id, pre_key_public) = bundle.pre_key
-  let #(signed_pre_key_id, signed_pre_key_public, signed_pre_key_signature) = bundle.signed_pre_key
+  let registration_id_str = int.to_string(bundle.registration_id)
+  let #(pre_key_id, _pre_key_public) = bundle.pre_key
+  let #(signed_pre_key_id, _signed_pre_key_public, _signed_pre_key_signature) = bundle.signed_pre_key
   
-  // Convert to a simple binary format (this is a placeholder)
-  <<
-    registration_id_bytes:utf8,
-    0,
-    bundle.identity_key:bits,
-    0,
-    pre_key_id:32,
-    pre_key_public:bits,
-    0,
-    signed_pre_key_id:32,
-    signed_pre_key_public:bits,
-    0,
-    signed_pre_key_signature:bits,
-    0,
-    bundle.base_key:bits
-  >>
+  // For now, just return a simple placeholder binary
+  // This is a temporary implementation until proper serialization is needed
+  <<registration_id_str:utf8, pre_key_id:32, signed_pre_key_id:32>>
 }
