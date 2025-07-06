@@ -203,6 +203,15 @@ build-wrappers: build
 	cd wrappers/gleam && gleam build
 	@echo "Wrapper packages built successfully!"
 
+# Build wrapper packages with nix-shell
+build-wrappers-nix:
+	@echo "Building wrapper packages with nix-shell..."
+	@echo "Building Elixir wrapper..."
+	nix-shell --run "cd wrappers/elixir && mix deps.get && mix compile"
+	@echo "Building Gleam wrapper..."
+	nix-shell --run "cd wrappers/gleam && gleam build"
+	@echo "Wrapper packages built successfully!"
+
 # Publish wrapper packages to Hex.pm
 publish-wrappers: build-wrappers
 	@echo "Publishing wrapper packages to Hex.pm..."

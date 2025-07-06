@@ -47,6 +47,18 @@ target_link_libraries(signal_nif ${SODIUM_LIBRARY})
 target_link_libraries(libsignal_protocol_nif ${SODIUM_LIBRARY})
 target_link_libraries(libsignal_protocol_nif_v2 ${SODIUM_LIBRARY})
 
+# Remove explicit erl_nif linking; use dynamic lookup on macOS
+if(APPLE)
+    foreach(target signal_nif libsignal_protocol_nif libsignal_protocol_nif_v2)
+        target_link_libraries(${target} ${SODIUM_LIBRARY})
+        target_link_options(${target} PRIVATE "-undefined" "dynamic_lookup")
+    endforeach()
+else()
+    foreach(target signal_nif libsignal_protocol_nif libsignal_protocol_nif_v2)
+        target_link_libraries(${target} ${SODIUM_LIBRARY})
+    endforeach()
+endif()
+
 # Set output directory and name for signal_nif
 set_target_properties(signal_nif PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/../priv"

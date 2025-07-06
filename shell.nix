@@ -6,7 +6,6 @@ pkgs.mkShell {
     cmake
     gcc
     gdb
-    valgrind
     libsodium
   ];
   
