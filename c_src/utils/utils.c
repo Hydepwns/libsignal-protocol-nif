@@ -23,8 +23,8 @@ ERL_NIF_TERM make_binary(ErlNifEnv *env, const unsigned char *data, size_t len)
 
 int init_openssl(void)
 {
-  // Initialize OpenSSL
-  if (!OPENSSL_init_crypto(OPENSSL_INIT_LOAD_CONFIG, NULL))
+  // Initialize OpenSSL without loading config file
+  if (!OPENSSL_init_crypto(OPENSSL_INIT_ADD_ALL_CIPHERS | OPENSSL_INIT_ADD_ALL_DIGESTS, NULL))
   {
     return 0;
   }

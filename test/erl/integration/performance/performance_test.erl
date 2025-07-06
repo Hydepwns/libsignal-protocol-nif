@@ -44,7 +44,7 @@ benchmark_key_generation(Iterations) ->
 
     io:format("  Duration: ~.3f seconds~n", [Duration]),
     io:format("  Average time: ~.6f seconds/key~n", [AvgTime]),
-    io:format("  Throughput: ~.0f keys/second~n~n", [Throughput]),
+    io:format("  Throughput: ~w keys/second~n~n", [round(Throughput)]),
 
     #{duration => Duration,
       avg_time => AvgTime,
@@ -80,7 +80,7 @@ benchmark_encryption(Iterations) ->
 
     io:format("  Duration: ~.3f seconds~n", [Duration]),
     io:format("  Average time: ~.6f seconds/encryption~n", [AvgTime]),
-    io:format("  Throughput: ~.0f encryptions/second~n~n", [Throughput]),
+    io:format("  Throughput: ~w encryptions/second~n~n", [round(Throughput)]),
 
     #{duration => Duration,
       avg_time => AvgTime,
@@ -125,7 +125,7 @@ benchmark_decryption(Iterations) ->
 
     io:format("  Duration: ~.3f seconds~n", [Duration]),
     io:format("  Average time: ~.6f seconds/decryption~n", [AvgTime]),
-    io:format("  Throughput: ~.0f decryptions/second~n~n", [Throughput]),
+    io:format("  Throughput: ~w decryptions/second~n~n", [round(Throughput)]),
 
     #{duration => Duration,
       avg_time => AvgTime,
@@ -160,7 +160,7 @@ benchmark_cache_performance(Iterations) ->
 
     io:format("  Duration: ~.3f seconds~n", [Duration]),
     io:format("  Average time: ~.6f seconds/operation~n", [AvgTime]),
-    io:format("  Throughput: ~.0f operations/second~n~n", [Throughput]),
+    io:format("  Throughput: ~w operations/second~n~n", [round(Throughput)]),
 
     #{duration => Duration,
       avg_time => AvgTime,
@@ -195,7 +195,7 @@ benchmark_memory_usage(Iterations) ->
 
     io:format("  Duration: ~.3f seconds~n", [Duration]),
     io:format("  Average time: ~.6f seconds/operation~n", [AvgTime]),
-    io:format("  Throughput: ~.0f operations/second~n", [Throughput]),
+    io:format("  Throughput: ~w operations/second~n", [round(Throughput)]),
     io:format("  Memory difference: ~p bytes~n~n", [MemoryDiff]),
 
     #{duration => Duration,
@@ -236,7 +236,7 @@ benchmark_concurrent_operations(Iterations) ->
 
     io:format("  Duration: ~.3f seconds~n", [Duration]),
     io:format("  Average time: ~.6f seconds/operation~n", [AvgTime]),
-    io:format("  Throughput: ~.0f operations/second~n~n", [Throughput]),
+    io:format("  Throughput: ~w operations/second~n~n", [round(Throughput)]),
 
     #{duration => Duration,
       avg_time => AvgTime,
@@ -252,7 +252,7 @@ generate_report(Results) ->
         lists:sum([maps:get(throughput, Result) || {_, Result} <- Results]) / length(Results),
 
     io:format("Total benchmark duration: ~.3f seconds~n", [TotalDuration]),
-    io:format("Average throughput: ~.0f operations/second~n~n", [AvgThroughput]),
+    io:format("Average throughput: ~w operations/second~n~n", [round(AvgThroughput)]),
 
     % Write detailed results to file
     {ok, File} = file:open("tmp/performance_report.txt", [write]),
@@ -268,14 +268,14 @@ generate_report(Results) ->
          io:format(File, "  Duration: ~.3f seconds~n", [maps:get(duration, Result)]),
          io:format(File, "  Average time: ~.6f seconds/operation~n", [maps:get(avg_time, Result)]),
          io:format(File,
-                   "  Throughput: ~.0f operations/second~n~n",
-                   [maps:get(throughput, Result)])
+                   "  Throughput: ~w operations/second~n~n",
+                   [round(maps:get(throughput, Result))])
      end
      || {Name, Result} <- Results],
 
     io:format(File, "Summary:~n", []),
     io:format(File, "  Total duration: ~.3f seconds~n", [TotalDuration]),
-    io:format(File, "  Average throughput: ~.0f operations/second~n", [AvgThroughput]),
+    io:format(File, "  Average throughput: ~w operations/second~n", [round(AvgThroughput)]),
 
     file:close(File),
 
@@ -286,15 +286,15 @@ get_memory_usage() ->
     case os:type() of
         {unix, darwin} ->
             % macOS
-            {ok, Output} = cmd("ps -o rss= -p " ++ os:getpid()),
+            Output = cmd("ps -o rss= -p " ++ os:getpid()),
             list_to_integer(string:trim(Output)) * 1024;
         {unix, _} ->
             % Linux
-            {ok, Output} = cmd("ps -o rss= -p " ++ os:getpid()),
+            Output = cmd("ps -o rss= -p " ++ os:getpid()),
             list_to_integer(string:trim(Output)) * 1024;
         {win32, _} ->
             % Windows
-            {ok, Output} = cmd("wmic process where ProcessId=" ++ os:getpid() ++ " get WorkingSetSize /value"),
+            _Output = cmd("wmic process where ProcessId=" ++ os:getpid() ++ " get WorkingSetSize /value"),
             0 % Placeholder
     end.
 

@@ -1,7 +1,0 @@
-{application,
- nif,
- [{description, "Signal Protocol NIF"},
-  {vsn, "0.1.0"},
-  {registered, []},
-  {applications, [kernel, stdlib, crypto, signal_crypto]},
-  {env, []}]}.

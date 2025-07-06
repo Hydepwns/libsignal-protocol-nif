@@ -10,9 +10,13 @@
     process_pre_key_bundle/2,
     encrypt_message/2,
     decrypt_message/2,
-    get_cache_stats/1,
-    reset_cache_stats/1,
-    set_cache_size/3
+    get_cache_stats/3,
+    reset_cache_stats/2,
+    set_cache_size/2,
+    % Double Ratchet aliases
+    init_double_ratchet/3,
+    dr_encrypt_message/2,
+    dr_decrypt_message/2
 ]).
 
 -on_load(load_nif/0).
@@ -59,7 +63,7 @@ create_session(_PublicKey) ->
 create_session(_LocalKey, _RemoteKey) ->
     erlang:nif_error(nif_not_loaded).
 
-process_pre_key_bundle(_Session, _Bundle) ->
+process_pre_key_bundle(_LocalIdentityKey, _Bundle) ->
     erlang:nif_error(nif_not_loaded).
 
 encrypt_message(_Session, _Message) ->
@@ -68,14 +72,25 @@ encrypt_message(_Session, _Message) ->
 decrypt_message(_Session, _EncryptedMessage) ->
     erlang:nif_error(nif_not_loaded).
 
-get_cache_stats(_Session) ->
+% Double Ratchet functions (implemented via cache function replacements)
+get_cache_stats(_SharedSecret, _RemotePublicKey, _IsAlice) ->
     erlang:nif_error(nif_not_loaded).
 
-reset_cache_stats(_Session) ->
+reset_cache_stats(_DrSession, _Message) ->
     erlang:nif_error(nif_not_loaded).
 
-set_cache_size(_Session, _MaxSize, _TTL) ->
+set_cache_size(_DrSession, _EncryptedMessage) ->
     erlang:nif_error(nif_not_loaded).
+
+% Double Ratchet aliases for better API
+init_double_ratchet(SharedSecret, RemotePublicKey, IsAlice) ->
+    get_cache_stats(SharedSecret, RemotePublicKey, IsAlice).
+
+dr_encrypt_message(DrSession, Message) ->
+    reset_cache_stats(DrSession, Message).
+
+dr_decrypt_message(DrSession, EncryptedMessage) ->
+    set_cache_size(DrSession, EncryptedMessage).
 
 %% Erlang fallback implementations (used only if C NIF fails to load)
 
@@ -104,8 +119,11 @@ create_session_fallback(LocalKey, RemoteKey) when is_binary(LocalKey), is_binary
     SessionId = crypto:strong_rand_bytes(32),
     {ok, SessionId}.
 
-process_pre_key_bundle_fallback(Session, Bundle) when is_binary(Session), is_binary(Bundle) ->
-    ok.
+process_pre_key_bundle_fallback(LocalIdentityKey, Bundle) when is_binary(LocalIdentityKey), is_binary(Bundle) ->
+    % Fallback X3DH implementation - returns dummy session key and ephemeral key
+    SessionKey = crypto:strong_rand_bytes(64),
+    EphemeralKey = crypto:strong_rand_bytes(32),
+    {ok, {SessionKey, EphemeralKey}}.
 
 encrypt_message_fallback(Session, Message) when is_binary(Session), is_binary(Message) ->
     % Simple "encryption" - add padding
