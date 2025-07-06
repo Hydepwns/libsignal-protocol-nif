@@ -26,7 +26,7 @@ else
 endif
 
 # Build targets
-.PHONY: all clean test test-unit test-integration test-smoke test-clean deps install perf-test perf-monitor docker-build docker-test release dev-setup dev-test monitor-memory monitor-cache help ci-build ci-test
+.PHONY: all clean test test-unit test-integration test-smoke test-clean deps install perf-test perf-monitor docker-build docker-test release dev-setup dev-test monitor-memory monitor-cache help ci-build ci-test build-wrappers publish-wrappers
 
 # Default target
 all: build
@@ -194,6 +194,24 @@ docker-perf:
 	@echo "Running performance tests in Docker..."
 	docker-compose up --abort-on-container-exit perf-test
 
+# Build wrapper packages
+build-wrappers: build
+	@echo "Building wrapper packages..."
+	@echo "Building Elixir wrapper..."
+	cd wrappers/elixir && mix deps.get && mix compile
+	@echo "Building Gleam wrapper..."
+	cd wrappers/gleam && gleam build
+	@echo "Wrapper packages built successfully!"
+
+# Publish wrapper packages to Hex.pm
+publish-wrappers: build-wrappers
+	@echo "Publishing wrapper packages to Hex.pm..."
+	@echo "Publishing Elixir wrapper..."
+	cd wrappers/elixir && mix hex.publish
+	@echo "Publishing Gleam wrapper..."
+	cd wrappers/gleam && rebar3 hex publish
+	@echo "Wrapper packages published successfully!"
+
 # Release automation
 release:
 	@echo "Creating release..."
@@ -263,6 +281,8 @@ help:
 	@echo "  monitor-cache      - Monitor cache performance"
 	@echo "  ci-build           - Build for CI"
 	@echo "  ci-test            - Run CI tests"
+	@echo "  build-wrappers     - Build Elixir and Gleam wrapper packages"
+	@echo "  publish-wrappers   - Publish wrapper packages to Hex.pm"
 	@echo "  help               - Show this help message"
 
 # Diagnose and fix directory issues
