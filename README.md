@@ -94,6 +94,14 @@ ok = signal_nif:verify_signature(PublicKey, Message, Signature).
 - **Memory Management**: Secure memory clearing with `sodium_memzero()`
 - **Error Handling**: Comprehensive error checking and reporting
 
+## Documentation
+
+- [📚 Complete API Reference](docs/API.md) - Detailed documentation for all NIF functions
+- [🏗️ Architecture Guide](docs/ARCHITECTURE.md) - System design and implementation details
+- [🔒 Security Considerations](docs/SECURITY.md) - Cryptographic security and best practices
+- [🚀 Getting Started](docs/IMMEDIATE_ACTIONS.md) - Quick start guide and immediate actions
+- [📋 Documentation Plan](docs/DOCUMENTATION_PLAN.md) - Comprehensive documentation roadmap
+
 ## Language Wrappers
 
 This project provides Signal Protocol implementations for multiple BEAM languages:

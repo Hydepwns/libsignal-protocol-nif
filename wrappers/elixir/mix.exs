@@ -17,7 +17,20 @@ defmodule LibsignalProtocol.MixProject do
         "coveralls.github": :test
       ],
       docs: [output: "tmp/doc"],
-      aliases: aliases()
+      aliases: aliases(),
+      description: "Elixir wrapper for Signal Protocol cryptographic primitives",
+      package: package(),
+      source_url: "https://github.com/hydepwns/libsignal-protocol-nif",
+      homepage_url: "https://hex.pm/packages/libsignal_protocol"
+    ]
+  end
+
+  defp package do
+    [
+      name: "libsignal_protocol",
+      licenses: ["Apache-2.0"],
+      links: %{"GitHub" => "https://github.com/hydepwns/libsignal-protocol-nif"},
+      files: ~w(lib mix.exs README.md LICENSE)
     ]
   end
 
