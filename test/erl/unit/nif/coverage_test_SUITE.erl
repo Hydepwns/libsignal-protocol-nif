@@ -3,13 +3,11 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--export([all/0, init_per_suite/1, end_per_suite/1, 
-         test_nif_loading/1, test_basic_crypto/1, test_protocol_functions/1]).
+-export([all/0, init_per_suite/1, end_per_suite/1, test_nif_loading/1,
+         test_basic_crypto/1, test_protocol_functions/1]).
 
 all() ->
-    [test_nif_loading,
-     test_basic_crypto,
-     test_protocol_functions].
+    [test_nif_loading, test_basic_crypto, test_protocol_functions].
 
 init_per_suite(Config) ->
     io:format("coverage_test_SUITE: init_per_suite starting~n", []),
@@ -45,12 +43,12 @@ test_basic_crypto(_Config) ->
     RandomBytes = crypto:strong_rand_bytes(32),
     ?assert(is_binary(RandomBytes)),
     ?assertEqual(32, byte_size(RandomBytes)),
-    
+
     % Test hash function
     Hash = crypto:hash(sha256, <<"test">>),
     ?assert(is_binary(Hash)),
     ?assertEqual(32, byte_size(Hash)),
-    
+
     % Test HMAC
     Hmac = crypto:mac(hmac, sha256, <<"key">>, <<"data">>),
     ?assert(is_binary(Hmac)),
@@ -63,13 +61,13 @@ test_protocol_functions(_Config) ->
             ?assert(is_binary(PublicKey)),
             ?assert(is_binary(PrivateKey)),
             ?assertNotEqual(PublicKey, PrivateKey),
-            
+
             % Test pre-key generation
             case nif:generate_pre_key(1) of
                 {ok, {KeyId, PreKeyPublic}} ->
                     ?assertEqual(1, KeyId),
                     ?assert(is_binary(PreKeyPublic)),
-                    
+
                     % Test signed pre-key generation
                     case nif:generate_signed_pre_key(PrivateKey, 2) of
                         {ok, {SignedKeyId, SignedPreKeyPublic, Signature}} ->
@@ -90,4 +88,4 @@ test_protocol_functions(_Config) ->
             io:format("Identity key generation failed: ~p~n", [Reason]),
             % This might fail, but that's OK for coverage
             ok
-    end. 
+    end.

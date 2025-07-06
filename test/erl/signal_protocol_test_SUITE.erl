@@ -3,22 +3,15 @@
 -include_lib("common_test/include/ct.hrl").
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([
-    test_crypto_functions/1,
-    test_session_management/1,
-    test_message_encryption/1,
-    test_protocol_functions/1,
-    test_cache_management/1
-]).
+-export([test_crypto_functions/1, test_session_management/1, test_message_encryption/1,
+         test_protocol_functions/1, test_cache_management/1]).
 
 all() ->
-    [
-        test_crypto_functions,
-        test_session_management,
-        test_message_encryption,
-        test_protocol_functions,
-        test_cache_management
-    ].
+    [test_crypto_functions,
+     test_session_management,
+     test_message_encryption,
+     test_protocol_functions,
+     test_cache_management].
 
 init_per_suite(Config) ->
     % Load the signal_nif module
@@ -69,9 +62,8 @@ test_crypto_functions(_Config) ->
     true = is_binary(Ciphertext),
     16 = byte_size(Tag),
 
-    {ok, Decrypted} = signal_nif:aes_gcm_decrypt(
-        AesKey, IV, Ciphertext, AAD, Tag, byte_size(Plaintext)
-    ),
+    {ok, Decrypted} =
+        signal_nif:aes_gcm_decrypt(AesKey, IV, Ciphertext, AAD, Tag, byte_size(Plaintext)),
     Plaintext = Decrypted,
 
     % Ed25519 implementation is now complete
@@ -84,7 +76,6 @@ test_crypto_functions(_Config) ->
     % ok = signal_nif:verify_signature(Ed25519Public, TestData, Signature),
     % InvalidSignature = crypto:strong_rand_bytes(64),
     % invalid_signature = signal_nif:verify_signature(Ed25519Public, TestData, InvalidSignature),
-
     ok.
 
 % ============================================================================
@@ -120,15 +111,20 @@ create_pre_key_bundle() ->
     % - base_key (32 bytes key + 64 bytes signature = 96 bytes)
     % - identity_key (32 bytes key + 64 bytes signature = 96 bytes)
     % - message (0 bytes for now)
-
     Version = 1,
     RegistrationId = 12345,
     PreKeyId = 67890,
     SignedPreKeyId = 11111,
 
     % Pack the bundle as a binary
-    <<Version:8, RegistrationId:32/big, PreKeyId:32/big, SignedPreKeyId:32/big, BaseKey:32/binary,
-        BaseKeySignature:64/binary, IdentityKey:32/binary, IdentityKeySignature:64/binary>>.
+    <<Version:8,
+      RegistrationId:32/big,
+      PreKeyId:32/big,
+      SignedPreKeyId:32/big,
+      BaseKey:32/binary,
+      BaseKeySignature:64/binary,
+      IdentityKey:32/binary,
+      IdentityKeySignature:64/binary>>.
 
 % ============================================================================
 % MESSAGE ENCRYPTION TESTS

@@ -294,7 +294,8 @@ get_memory_usage() ->
             list_to_integer(string:trim(Output)) * 1024;
         {win32, _} ->
             % Windows
-            _Output = cmd("wmic process where ProcessId=" ++ os:getpid() ++ " get WorkingSetSize /value"),
+            _Output =
+                cmd("wmic process where ProcessId=" ++ os:getpid() ++ " get WorkingSetSize /value"),
             0 % Placeholder
     end.
 

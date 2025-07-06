@@ -3,31 +3,19 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--export([
-    all/0,
-    init_per_suite/1,
-    end_per_suite/1,
-    test_basic_crypto/1,
-    test_curve25519_keypair/1,
-    test_ed25519_keypair/1,
-    test_ed25519_sign_verify/1,
-    test_sha256/1,
-    test_sha512/1,
-    test_hmac_sha256/1,
-    test_aes_gcm_encryption/1
-]).
+-export([all/0, init_per_suite/1, end_per_suite/1, test_basic_crypto/1,
+         test_curve25519_keypair/1, test_ed25519_keypair/1, test_ed25519_sign_verify/1,
+         test_sha256/1, test_sha512/1, test_hmac_sha256/1, test_aes_gcm_encryption/1]).
 
 all() ->
-    [
-        test_basic_crypto,
-        test_curve25519_keypair,
-        test_ed25519_keypair,
-        test_ed25519_sign_verify,
-        test_sha256,
-        test_sha512,
-        test_hmac_sha256,
-        test_aes_gcm_encryption
-    ].
+    [test_basic_crypto,
+     test_curve25519_keypair,
+     test_ed25519_keypair,
+     test_ed25519_sign_verify,
+     test_sha256,
+     test_sha512,
+     test_hmac_sha256,
+     test_aes_gcm_encryption].
 
 init_per_suite(Config) ->
     io:format("signal_crypto_SUITE: init_per_suite starting~n", []),
@@ -103,9 +91,8 @@ test_sha512(_Config) ->
 
 test_hmac_sha256(_Config) ->
     % Test HMAC-SHA256
-    Key =
-        <<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-            26, 27, 28, 29, 30, 31, 32>>,
+    Key = <<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 26, 27, 28, 29, 30, 31, 32>>,
     Data = <<"Hello, Signal Protocol!">>,
     {ok, Hmac} = signal_nif:hmac_sha256(Key, Data),
     ?assert(is_binary(Hmac)),
@@ -114,9 +101,8 @@ test_hmac_sha256(_Config) ->
 
 test_aes_gcm_encryption(_Config) ->
     % Test AES-GCM encryption/decryption
-    Key =
-        <<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-            26, 27, 28, 29, 30, 31, 32>>,
+    Key = <<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 26, 27, 28, 29, 30, 31, 32>>,
     IV = <<1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12>>,
     Plaintext = <<"Secret message">>,
     AAD = <<"Additional authenticated data">>,
@@ -126,8 +112,7 @@ test_aes_gcm_encryption(_Config) ->
     ?assert(is_binary(Tag)),
     ?assertEqual(16, byte_size(Tag)),
 
-    {ok, Decrypted} = signal_nif:aes_gcm_decrypt(
-        Key, IV, Ciphertext, AAD, Tag, byte_size(Plaintext)
-    ),
+    {ok, Decrypted} =
+        signal_nif:aes_gcm_decrypt(Key, IV, Ciphertext, AAD, Tag, byte_size(Plaintext)),
     ?assertEqual(Plaintext, Decrypted),
     ok.

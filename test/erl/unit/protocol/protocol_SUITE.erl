@@ -3,17 +3,14 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--export([all/0, groups/0, init_per_suite/1, end_per_suite/1, 
-         init_per_group/2, end_per_group/2,
-         test_start_stop/1, test_generate_identity_key_pair/1,
-         test_generate_pre_key/1, test_generate_signed_pre_key/1,
-         test_create_session/1, test_process_pre_key_bundle/1,
-         test_encrypt_message/1, test_decrypt_message/1,
-         test_unknown_call/1, test_error_handling/1,
-         test_concurrent_operations/1, test_gen_server_callbacks/1,
-         test_code_change/1, test_error_handling_invalid_params/1,
-         test_edge_cases/1, test_session_persistence/1,
-         test_bundle_binary_creation/1, test_performance/1]).
+-export([all/0, groups/0, init_per_suite/1, end_per_suite/1, init_per_group/2,
+         end_per_group/2, test_start_stop/1, test_generate_identity_key_pair/1,
+         test_generate_pre_key/1, test_generate_signed_pre_key/1, test_create_session/1,
+         test_process_pre_key_bundle/1, test_encrypt_message/1, test_decrypt_message/1,
+         test_unknown_call/1, test_error_handling/1, test_concurrent_operations/1,
+         test_gen_server_callbacks/1, test_code_change/1, test_error_handling_invalid_params/1,
+         test_edge_cases/1, test_session_persistence/1, test_bundle_binary_creation/1,
+         test_performance/1]).
 
 %% Helper function to create a pre-key bundle in the correct binary format
 %% Expected format: registration_id(4) + device_id(4) + pre_key_id(4) + pre_key_len(4) + pre_key_data +
@@ -62,7 +59,9 @@ groups() ->
        test_error_handling_invalid_params,
        test_edge_cases,
        test_bundle_binary_creation]},
-     {expensive, [], [test_concurrent_operations, test_session_persistence, test_performance]}].
+     {expensive,
+      [],
+      [test_concurrent_operations, test_session_persistence, test_performance]}].
 
 init_per_suite(Config) ->
     io:format("protocol_SUITE: init_per_suite starting~n", []),
@@ -476,33 +475,38 @@ test_error_handling_invalid_params(_Config) ->
     try
         protocol:generate_pre_key("invalid_key_id")
     catch
-        _:_ -> ok
+        _:_ ->
+            ok
     end,
 
     try
         protocol:generate_pre_key(-1)
     catch
-        _:_ -> ok
+        _:_ ->
+            ok
     end,
 
     % Test with invalid identity keys
     try
         protocol:generate_signed_pre_key(<<"invalid_key">>, 123)
     catch
-        _:_ -> ok
+        _:_ ->
+            ok
     end,
 
     % Test with invalid session data
     try
         protocol:encrypt_message(<<"invalid_session">>, <<"test">>)
     catch
-        _:_ -> ok
+        _:_ ->
+            ok
     end,
 
     try
         protocol:decrypt_message(<<"invalid_session">>, <<"test">>)
     catch
-        _:_ -> ok
+        _:_ ->
+            ok
     end,
 
     % Verify server is still running
@@ -544,16 +548,25 @@ test_session_persistence(_Config) ->
     {ok, {PreKeyId, PreKeyPublic}} = protocol:generate_pre_key(12345),
     {ok, {SignedPreKeyId, SignedPreKeyPublic, _Signature}} =
         protocol:generate_signed_pre_key(RemoteIdentityKey, 67890),
-    BundleBin = create_bundle_binary(123, 456, PreKeyId, PreKeyPublic,
-                                    SignedPreKeyId, SignedPreKeyPublic, RemoteIdentityKey),
+    BundleBin =
+        create_bundle_binary(123,
+                             456,
+                             PreKeyId,
+                             PreKeyPublic,
+                             SignedPreKeyId,
+                             SignedPreKeyPublic,
+                             RemoteIdentityKey),
     {ok, EstablishedSession} = protocol:process_pre_key_bundle(Session, BundleBin),
 
     % Now encrypt multiple messages with the established session
     Messages = [<<"Message 1">>, <<"Message 2">>, <<"Message 3">>],
-    FinalSession = lists:foldl(fun(Message, {AccSession, AccEncrypted}) ->
-        {ok, Encrypted} = protocol:encrypt_message(AccSession, Message),
-        {AccSession, [Encrypted | AccEncrypted]}
-    end, {EstablishedSession, []}, Messages),
+    FinalSession =
+        lists:foldl(fun(Message, {AccSession, AccEncrypted}) ->
+                       {ok, Encrypted} = protocol:encrypt_message(AccSession, Message),
+                       {AccSession, [Encrypted | AccEncrypted]}
+                    end,
+                    {EstablishedSession, []},
+                    Messages),
 
     % Extract the final session and encrypted messages
     {FinalSessionState, ReversedEncryptedMessages} = FinalSession,
@@ -561,33 +574,47 @@ test_session_persistence(_Config) ->
 
     % Verify all messages can be decrypted
     lists:foreach(fun({Message, Encrypted}) ->
-        {ok, Decrypted} = protocol:decrypt_message(FinalSessionState, Encrypted),
-        ?assertEqual(Message, Decrypted)
-    end, lists:zip(Messages, EncryptedMessages)),
+                     {ok, Decrypted} = protocol:decrypt_message(FinalSessionState, Encrypted),
+                     ?assertEqual(Message, Decrypted)
+                  end,
+                  lists:zip(Messages, EncryptedMessages)),
 
     ok = protocol:stop().
 
 %% Test bundle binary creation helper
 test_bundle_binary_creation(_Config) ->
     % Test with various key sizes
-    TestCases = [
-        {123, 456, 789, <<1:256>>, 101, <<2:256>>, <<3:256>>},
-        {0, 0, 0, <<>>, 0, <<>>, <<>>},
-        {16#FFFFFFFF, 16#FFFFFFFF, 16#FFFFFFFF, <<1:512>>, 16#FFFFFFFF, <<2:512>>, <<3:512>>}
-    ],
+    TestCases =
+        [{123, 456, 789, <<1:256>>, 101, <<2:256>>, <<3:256>>},
+         {0, 0, 0, <<>>, 0, <<>>, <<>>},
+         {16#FFFFFFFF, 16#FFFFFFFF, 16#FFFFFFFF, <<1:512>>, 16#FFFFFFFF, <<2:512>>, <<3:512>>}],
 
-    lists:foreach(fun({RegId, DevId, PreKeyId, PreKeyPub, SignedPreKeyId, SignedPreKeyPub, IdentityKey}) ->
-        BundleBin = create_bundle_binary(RegId, DevId, PreKeyId, PreKeyPub,
-                                        SignedPreKeyId, SignedPreKeyPub, IdentityKey),
-        ?assert(is_binary(BundleBin)),
-        
-        % Verify structure
-        PreKeyLen = byte_size(PreKeyPub),
-        SignedPreKeyLen = byte_size(SignedPreKeyPub),
-        IdentityKeyLen = byte_size(IdentityKey),
-        ExpectedSize = 4 + 4 + 4 + 4 + PreKeyLen + 4 + 4 + SignedPreKeyLen + 4 + IdentityKeyLen,
-        ?assertEqual(ExpectedSize, byte_size(BundleBin))
-    end, TestCases).
+    lists:foreach(fun({RegId,
+                       DevId,
+                       PreKeyId,
+                       PreKeyPub,
+                       SignedPreKeyId,
+                       SignedPreKeyPub,
+                       IdentityKey}) ->
+                     BundleBin =
+                         create_bundle_binary(RegId,
+                                              DevId,
+                                              PreKeyId,
+                                              PreKeyPub,
+                                              SignedPreKeyId,
+                                              SignedPreKeyPub,
+                                              IdentityKey),
+                     ?assert(is_binary(BundleBin)),
+
+                     % Verify structure
+                     PreKeyLen = byte_size(PreKeyPub),
+                     SignedPreKeyLen = byte_size(SignedPreKeyPub),
+                     IdentityKeyLen = byte_size(IdentityKey),
+                     ExpectedSize =
+                         4 + 4 + 4 + 4 + PreKeyLen + 4 + 4 + SignedPreKeyLen + 4 + IdentityKeyLen,
+                     ?assertEqual(ExpectedSize, byte_size(BundleBin))
+                  end,
+                  TestCases).
 
 %% Test performance characteristics
 test_performance(_Config) ->
@@ -595,9 +622,8 @@ test_performance(_Config) ->
 
     % Test key generation performance
     StartTime = erlang:monotonic_time(microsecond),
-    lists:foreach(fun(_) ->
-        {ok, {_, _}} = protocol:generate_identity_key_pair()
-    end, lists:seq(1, 100)),
+    lists:foreach(fun(_) -> {ok, {_, _}} = protocol:generate_identity_key_pair() end,
+                  lists:seq(1, 100)),
     EndTime = erlang:monotonic_time(microsecond),
     GenerationTime = EndTime - StartTime,
     io:format("Generated 100 identity key pairs in ~p microseconds~n", [GenerationTime]),
@@ -605,11 +631,12 @@ test_performance(_Config) ->
     % Test session creation performance
     {ok, {LocalIdentityKey, _}} = protocol:generate_identity_key_pair(),
     {ok, {RemoteIdentityKey, _}} = protocol:generate_identity_key_pair(),
-    
+
     StartTime2 = erlang:monotonic_time(microsecond),
     lists:foreach(fun(_) ->
-        {ok, _} = protocol:create_session(LocalIdentityKey, RemoteIdentityKey)
-    end, lists:seq(1, 100)),
+                     {ok, _} = protocol:create_session(LocalIdentityKey, RemoteIdentityKey)
+                  end,
+                  lists:seq(1, 100)),
     EndTime2 = erlang:monotonic_time(microsecond),
     SessionTime = EndTime2 - StartTime2,
     io:format("Created 100 sessions in ~p microseconds~n", [SessionTime]),

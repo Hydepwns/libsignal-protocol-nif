@@ -3,9 +3,8 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--export([all/0, groups/0, init_per_suite/1, end_per_suite/1, 
-         init_per_group/2, end_per_group/2,
-         test_complete_signal_workflow/1, test_bidirectional_communication/1,
+-export([all/0, groups/0, init_per_suite/1, end_per_suite/1, init_per_group/2,
+         end_per_group/2, test_complete_signal_workflow/1, test_bidirectional_communication/1,
          test_multiple_sessions/1, test_session_recovery/1, test_key_rotation/1,
          test_message_ordering/1, test_error_recovery/1, test_concurrent_sessions/1,
          test_performance_under_load/1, test_memory_usage/1, test_stress_testing/1]).
@@ -64,7 +63,8 @@ test_complete_signal_workflow(_Config) ->
     {ok, {BobIdentityPublic, _BobIdentityPrivate}} = signal_crypto:generate_key_pair(),
 
     % Generate Curve25519 key pairs for pre-keys and signed pre-keys
-    {ok, {_AliceCurvePublic, AliceCurvePrivate}} = signal_crypto:generate_curve25519_key_pair(),
+    {ok, {_AliceCurvePublic, AliceCurvePrivate}} =
+        signal_crypto:generate_curve25519_key_pair(),
     {ok, {_BobCurvePublic, BobCurvePrivate}} = signal_crypto:generate_curve25519_key_pair(),
 
     % Generate pre-keys for both parties (Curve25519)
@@ -72,22 +72,22 @@ test_complete_signal_workflow(_Config) ->
     {ok, {BobPreKeyId, BobPreKey}} = nif:generate_pre_key(1),
 
     % Generate signed pre-keys for both parties (Curve25519 private key)
-    io:format("test_complete_signal_workflow: AliceCurvePrivate ~p (~p bytes)~n", 
+    io:format("test_complete_signal_workflow: AliceCurvePrivate ~p (~p bytes)~n",
               [AliceCurvePrivate, byte_size(AliceCurvePrivate)]),
     {ok, {AliceSignedPreKeyId, AliceSignedPreKey, AliceSignature}} =
         nif:generate_signed_pre_key(AliceCurvePrivate, 1),
-    io:format("test_complete_signal_workflow: AliceSignedPreKey ~p (~p bytes)~n", 
+    io:format("test_complete_signal_workflow: AliceSignedPreKey ~p (~p bytes)~n",
               [AliceSignedPreKey, byte_size(AliceSignedPreKey)]),
-    io:format("test_complete_signal_workflow: AliceSignature ~p (~p bytes)~n", 
+    io:format("test_complete_signal_workflow: AliceSignature ~p (~p bytes)~n",
               [AliceSignature, byte_size(AliceSignature)]),
 
-    io:format("test_complete_signal_workflow: BobCurvePrivate ~p (~p bytes)~n", 
+    io:format("test_complete_signal_workflow: BobCurvePrivate ~p (~p bytes)~n",
               [BobCurvePrivate, byte_size(BobCurvePrivate)]),
     {ok, {BobSignedPreKeyId, BobSignedPreKey, BobSignature}} =
         nif:generate_signed_pre_key(BobCurvePrivate, 1),
-    io:format("test_complete_signal_workflow: BobSignedPreKey ~p (~p bytes)~n", 
+    io:format("test_complete_signal_workflow: BobSignedPreKey ~p (~p bytes)~n",
               [BobSignedPreKey, byte_size(BobSignedPreKey)]),
-    io:format("test_complete_signal_workflow: BobSignature ~p (~p bytes)~n", 
+    io:format("test_complete_signal_workflow: BobSignature ~p (~p bytes)~n",
               [BobSignature, byte_size(BobSignature)]),
 
     % Create pre-key bundles
@@ -109,8 +109,10 @@ test_complete_signal_workflow(_Config) ->
     BobSession = signal_session:new(BobIdentityPublic, AliceIdentityPublic),
 
     % Process bundles using signal_session module
-    {ok, AliceEstablishedSession} = signal_session:process_pre_key_bundle(AliceSession, BobBundle),
-    {ok, BobEstablishedSession} = signal_session:process_pre_key_bundle(BobSession, AliceBundle),
+    {ok, AliceEstablishedSession} =
+        signal_session:process_pre_key_bundle(AliceSession, BobBundle),
+    {ok, BobEstablishedSession} =
+        signal_session:process_pre_key_bundle(BobSession, AliceBundle),
 
     % Test bidirectional communication
     Messages =
@@ -124,12 +126,15 @@ test_complete_signal_workflow(_Config) ->
     % Alice sends first message
     {ok, AliceEncrypted1, AliceSession1} =
         signal_session:encrypt(AliceEstablishedSession, lists:nth(1, Messages)),
-    {ok, BobDecrypted1, BobSession1} = signal_session:decrypt(BobEstablishedSession, AliceEncrypted1),
+    {ok, BobDecrypted1, BobSession1} =
+        signal_session:decrypt(BobEstablishedSession, AliceEncrypted1),
     ?assertEqual(lists:nth(1, Messages), BobDecrypted1),
 
     % Bob sends response
-    {ok, BobEncrypted1, BobSession2} = signal_session:encrypt(BobSession1, lists:nth(2, Messages)),
-    {ok, AliceDecrypted1, AliceSession2} = signal_session:decrypt(AliceSession1, BobEncrypted1),
+    {ok, BobEncrypted1, BobSession2} =
+        signal_session:encrypt(BobSession1, lists:nth(2, Messages)),
+    {ok, AliceDecrypted1, AliceSession2} =
+        signal_session:decrypt(AliceSession1, BobEncrypted1),
     ?assertEqual(lists:nth(2, Messages), AliceDecrypted1),
 
     % Continue conversation
@@ -138,8 +143,10 @@ test_complete_signal_workflow(_Config) ->
     {ok, BobDecrypted2, BobSession3} = signal_session:decrypt(BobSession2, AliceEncrypted2),
     ?assertEqual(lists:nth(3, Messages), BobDecrypted2),
 
-    {ok, BobEncrypted2, _BobSession4} = signal_session:encrypt(BobSession3, lists:nth(4, Messages)),
-    {ok, AliceDecrypted2, _AliceSession4} = signal_session:decrypt(AliceSession3, BobEncrypted2),
+    {ok, BobEncrypted2, _BobSession4} =
+        signal_session:encrypt(BobSession3, lists:nth(4, Messages)),
+    {ok, AliceDecrypted2, _AliceSession4} =
+        signal_session:decrypt(AliceSession3, BobEncrypted2),
     ?assertEqual(lists:nth(4, Messages), AliceDecrypted2),
 
     io:format("Complete Signal Protocol workflow test passed~n").
@@ -165,22 +172,28 @@ test_bidirectional_communication(_Config) ->
         [crypto:strong_rand_bytes(100 + rand:uniform(900)) || _ <- lists:seq(1, NumMessages)],
 
     lists:foldl(fun(I, {AliceSess, BobSess}) ->
-                    Index = (I - 1) rem 2 + 1,
-                    Message = lists:nth(I, Messages),
+                   Index = (I - 1) rem 2 + 1,
+                   Message = lists:nth(I, Messages),
 
-                    case Index of
-                        1 -> % Alice sends
-                            {ok, Encrypted, AliceSessionUpdated} = signal_session:encrypt(AliceSess, Message),
-                            {ok, Decrypted, BobSessionUpdated} = signal_session:decrypt(BobSess, Encrypted),
-                            ?assertEqual(Message, Decrypted),
-                            {AliceSessionUpdated, BobSessionUpdated};
-                        2 -> % Bob sends
-                            {ok, Encrypted, BobSessionUpdated} = signal_session:encrypt(BobSess, Message),
-                            {ok, Decrypted, AliceSessionUpdated} = signal_session:decrypt(AliceSess, Encrypted),
-                            ?assertEqual(Message, Decrypted),
-                            {AliceSessionUpdated, BobSessionUpdated}
-                    end
-                end, {AliceSession, BobSession}, lists:seq(1, NumMessages)),
+                   case Index of
+                       1 -> % Alice sends
+                           {ok, Encrypted, AliceSessionUpdated} =
+                               signal_session:encrypt(AliceSess, Message),
+                           {ok, Decrypted, BobSessionUpdated} =
+                               signal_session:decrypt(BobSess, Encrypted),
+                           ?assertEqual(Message, Decrypted),
+                           {AliceSessionUpdated, BobSessionUpdated};
+                       2 -> % Bob sends
+                           {ok, Encrypted, BobSessionUpdated} =
+                               signal_session:encrypt(BobSess, Message),
+                           {ok, Decrypted, AliceSessionUpdated} =
+                               signal_session:decrypt(AliceSess, Encrypted),
+                           ?assertEqual(Message, Decrypted),
+                           {AliceSessionUpdated, BobSessionUpdated}
+                   end
+                end,
+                {AliceSession, BobSession},
+                lists:seq(1, NumMessages)),
 
     io:format("Bidirectional communication test passed with ~p messages~n", [NumMessages]).
 
@@ -285,7 +298,7 @@ test_key_rotation(_Config) ->
     {ok, {AliceNewSignedPreKeyId, AliceNewSignedPreKey, AliceNewSignature}} =
         nif:generate_signed_pre_key(AliceIdentityPrivate, 2),
     {ok, {BobNewSignedPreKeyId, BobNewSignedPreKey, BobNewSignature}} =
-        nif:generate_signed_pre_key(BobIdentityPrivate, 2), 
+        nif:generate_signed_pre_key(BobIdentityPrivate, 2),
 
     % Create new bundles with rotated keys
     AliceNewBundle =
@@ -585,26 +598,28 @@ establish_sessions(AliceIdentityPublic,
     {ok, {BobPreKeyId, BobPreKey}} = nif:generate_pre_key(1),
 
     % Generate signed pre-keys
-    io:format("test_complete_signal_workflow: AliceIdentityPrivate ~p (~p bytes)~n", 
+    io:format("test_complete_signal_workflow: AliceIdentityPrivate ~p (~p bytes)~n",
               [AliceIdentityPrivate, byte_size(AliceIdentityPrivate)]),
     io:format("test_complete_signal_workflow: AliceIdentityPrivate (hex): ~s~n",
-              [string:join([io_lib:format("~2.16.0B", [X]) || <<X:8>> <= AliceIdentityPrivate], " ")]),
+              [string:join([io_lib:format("~2.16.0B", [X]) || <<X:8>> <= AliceIdentityPrivate],
+                           " ")]),
     {ok, {AliceSignedPreKeyId, AliceSignedPreKey, AliceSignature}} =
         nif:generate_signed_pre_key(AliceIdentityPrivate, 1),
-    io:format("test_complete_signal_workflow: AliceSignedPreKey ~p (~p bytes)~n", 
+    io:format("test_complete_signal_workflow: AliceSignedPreKey ~p (~p bytes)~n",
               [AliceSignedPreKey, byte_size(AliceSignedPreKey)]),
-    io:format("test_complete_signal_workflow: AliceSignature ~p (~p bytes)~n", 
+    io:format("test_complete_signal_workflow: AliceSignature ~p (~p bytes)~n",
               [AliceSignature, byte_size(AliceSignature)]),
 
-    io:format("test_complete_signal_workflow: BobIdentityPrivate ~p (~p bytes)~n", 
+    io:format("test_complete_signal_workflow: BobIdentityPrivate ~p (~p bytes)~n",
               [BobIdentityPrivate, byte_size(BobIdentityPrivate)]),
     io:format("test_complete_signal_workflow: BobIdentityPrivate (hex): ~s~n",
-              [string:join([io_lib:format("~2.16.0B", [X]) || <<X:8>> <= BobIdentityPrivate], " ")]),
+              [string:join([io_lib:format("~2.16.0B", [X]) || <<X:8>> <= BobIdentityPrivate],
+                           " ")]),
     {ok, {BobSignedPreKeyId, BobSignedPreKey, BobSignature}} =
         nif:generate_signed_pre_key(BobIdentityPrivate, 1),
-    io:format("test_complete_signal_workflow: BobSignedPreKey ~p (~p bytes)~n", 
+    io:format("test_complete_signal_workflow: BobSignedPreKey ~p (~p bytes)~n",
               [BobSignedPreKey, byte_size(BobSignedPreKey)]),
-    io:format("test_complete_signal_workflow: BobSignature ~p (~p bytes)~n", 
+    io:format("test_complete_signal_workflow: BobSignature ~p (~p bytes)~n",
               [BobSignature, byte_size(BobSignature)]),
 
     % Create bundles
@@ -626,8 +641,10 @@ establish_sessions(AliceIdentityPublic,
     BobSession = signal_session:new(BobIdentityPublic, AliceIdentityPublic),
 
     % Process bundles using signal_session module
-    {ok, AliceEstablishedSession} = signal_session:process_pre_key_bundle(AliceSession, BobBundle),
-    {ok, BobEstablishedSession} = signal_session:process_pre_key_bundle(BobSession, AliceBundle),
+    {ok, AliceEstablishedSession} =
+        signal_session:process_pre_key_bundle(AliceSession, BobBundle),
+    {ok, BobEstablishedSession} =
+        signal_session:process_pre_key_bundle(BobSession, AliceBundle),
 
     {AliceEstablishedSession, BobEstablishedSession}.
 

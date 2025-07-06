@@ -16,10 +16,10 @@ init_per_suite(Config) ->
     io:format("nif module: ~p~n", [code:is_loaded(nif)]),
     io:format("protocol module: ~p~n", [code:is_loaded(protocol)]),
     io:format("signal_session module: ~p~n", [code:is_loaded(signal_session)]),
-    
+
     % Check code path
     io:format("Code path: ~p~n", [code:get_path()]),
-    
+
     % Try to load modules explicitly
     case code:ensure_loaded(signal_crypto) of
         {module, signal_crypto} ->
@@ -36,7 +36,7 @@ end_per_suite(_Config) ->
 test_module_loading(_Config) ->
     % Test if we can call signal_crypto functions
     io:format("Testing signal_crypto function calls...~n"),
-    
+
     % Test basic function call
     case catch signal_crypto:generate_key_pair() of
         {ok, {PublicKey, PrivateKey}} ->
@@ -52,4 +52,4 @@ test_module_loading(_Config) ->
         Other ->
             io:format("generate_key_pair returned unexpected: ~p~n", [Other]),
             ?assert(false, "signal_crypto:generate_key_pair/0 returned unexpected result")
-    end. 
+    end.

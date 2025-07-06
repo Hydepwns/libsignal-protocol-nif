@@ -3,21 +3,16 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--export([all/0, groups/0, init_per_suite/1, end_per_suite/1, 
-         init_per_group/2, end_per_group/2,
-         test_new_session/1, test_get_session_id/1, 
-         test_generate_deterministic_session_id/1,
-         test_process_pre_key_bundle_basic/1,
-         test_process_pre_key_bundle_invalid_signature/1,
-         test_encrypt_decrypt_basic/1, test_encrypt_decrypt_empty_message/1,
-         test_encrypt_decrypt_large_message/1, test_encrypt_without_chain_key/1,
-         test_decrypt_invalid_message/1, test_decrypt_invalid_header/1,
-         test_decrypt_missing_message_key/1, test_verify_bundle_signature/1,
-         test_calculate_shared_secret/1, test_concurrent_sessions/1,
-         test_stress_encryption/1,
-         test_verify_signature_edge_cases/1,
-         test_compute_key_edge_cases/1,
-         test_concurrent_operations/1]).
+-export([all/0, groups/0, init_per_suite/1, end_per_suite/1, init_per_group/2,
+         end_per_group/2, test_new_session/1, test_get_session_id/1,
+         test_generate_deterministic_session_id/1, test_process_pre_key_bundle_basic/1,
+         test_process_pre_key_bundle_invalid_signature/1, test_encrypt_decrypt_basic/1,
+         test_encrypt_decrypt_empty_message/1, test_encrypt_decrypt_large_message/1,
+         test_encrypt_without_chain_key/1, test_decrypt_invalid_message/1,
+         test_decrypt_invalid_header/1, test_decrypt_missing_message_key/1,
+         test_verify_bundle_signature/1, test_calculate_shared_secret/1,
+         test_concurrent_sessions/1, test_stress_encryption/1, test_verify_signature_edge_cases/1,
+         test_compute_key_edge_cases/1, test_concurrent_operations/1]).
 
 all() ->
     [{group, fast}, {group, expensive}].
@@ -111,7 +106,7 @@ test_get_session_id(_Config) ->
     {ok, {LocalPublic, _}} = signal_crypto:generate_key_pair(),
     {ok, {RemotePublic, _}} = signal_crypto:generate_key_pair(),
     Session = signal_session:new(LocalPublic, RemotePublic),
-    
+
     SessionId = signal_session:get_session_id(Session),
     ?assert(is_binary(SessionId)),
     ?assertEqual(32, byte_size(SessionId)),
@@ -121,18 +116,18 @@ test_get_session_id(_Config) ->
 test_generate_deterministic_session_id(_Config) ->
     {ok, {LocalPublic, _}} = signal_crypto:generate_key_pair(),
     {ok, {RemotePublic, _}} = signal_crypto:generate_key_pair(),
-    
+
     Session1 = signal_session:new(LocalPublic, RemotePublic),
     Session2 = signal_session:new(LocalPublic, RemotePublic),
-    
+
     % Same keys should produce same session ID
-    ?assertEqual(signal_session:get_session_id(Session1), 
+    ?assertEqual(signal_session:get_session_id(Session1),
                  signal_session:get_session_id(Session2)),
-    
+
     % Different keys should produce different session IDs
     {ok, {DifferentRemotePublic, _}} = signal_crypto:generate_key_pair(),
     Session3 = signal_session:new(LocalPublic, DifferentRemotePublic),
-    ?assertNotEqual(signal_session:get_session_id(Session1), 
+    ?assertNotEqual(signal_session:get_session_id(Session1),
                     signal_session:get_session_id(Session3)).
 
 %% Test process_pre_key_bundle/2 with valid bundle
@@ -172,7 +167,8 @@ test_process_pre_key_bundle_invalid_signature(_Config) ->
     InvalidSignature = <<0:256>>, % All zeros signature
 
     % Create pre-key bundle with invalid signature
-    Bundle = {123, 456, {1, PreKeyPublic}, {2, SignedPreKeyPublic, InvalidSignature}, RemotePublic},
+    Bundle =
+        {123, 456, {1, PreKeyPublic}, {2, SignedPreKeyPublic, InvalidSignature}, RemotePublic},
 
     % Create session and try to process invalid bundle
     Session = signal_session:new(LocalPublic, RemotePublic),
@@ -184,19 +180,21 @@ test_encrypt_decrypt_basic(_Config) ->
     {ok, {LocalPublic, _}} = signal_crypto:generate_key_pair(),
     {ok, {RemotePublic, _}} = signal_crypto:generate_key_pair(),
     Session = signal_session:new(LocalPublic, RemotePublic),
-    
+
     % Add chain key to session
     {ok, ChainKey} = signal_crypto:random_bytes(32),
-    SessionWithChainKey = Session#{chain_key => ChainKey, 
-                                   pre_key_id => 1,
-                                   signed_pre_key_id => 2,
-                                   ephemeral_key => <<1:256>>},
+    SessionWithChainKey =
+        Session#{chain_key => ChainKey,
+                 pre_key_id => 1,
+                 signed_pre_key_id => 2,
+                 ephemeral_key => <<1:256>>},
 
     % Test message
     TestMessage = <<"Hello, Signal Protocol!">>,
 
     % Encrypt message
-    {ok, EncryptedMessage, EncryptedSession} = signal_session:encrypt(SessionWithChainKey, TestMessage),
+    {ok, EncryptedMessage, EncryptedSession} =
+        signal_session:encrypt(SessionWithChainKey, TestMessage),
     ?assert(is_binary(EncryptedMessage)),
     ?assert(byte_size(EncryptedMessage) > byte_size(TestMessage)),
 
@@ -209,15 +207,17 @@ test_encrypt_decrypt_empty_message(_Config) ->
     {ok, {LocalPublic, _}} = signal_crypto:generate_key_pair(),
     {ok, {RemotePublic, _}} = signal_crypto:generate_key_pair(),
     Session = signal_session:new(LocalPublic, RemotePublic),
-    
+
     {ok, ChainKey} = signal_crypto:random_bytes(32),
-    SessionWithChainKey = Session#{chain_key => ChainKey, 
-                                   pre_key_id => 1,
-                                   signed_pre_key_id => 2,
-                                   ephemeral_key => <<1:256>>},
+    SessionWithChainKey =
+        Session#{chain_key => ChainKey,
+                 pre_key_id => 1,
+                 signed_pre_key_id => 2,
+                 ephemeral_key => <<1:256>>},
 
     % Test empty message
-    {ok, EncryptedMessage, EncryptedSession} = signal_session:encrypt(SessionWithChainKey, <<>>),
+    {ok, EncryptedMessage, EncryptedSession} =
+        signal_session:encrypt(SessionWithChainKey, <<>>),
     {ok, DecryptedMessage, _} = signal_session:decrypt(EncryptedSession, EncryptedMessage),
     ?assertEqual(<<>>, DecryptedMessage).
 
@@ -226,16 +226,18 @@ test_encrypt_decrypt_large_message(_Config) ->
     {ok, {LocalPublic, _}} = signal_crypto:generate_key_pair(),
     {ok, {RemotePublic, _}} = signal_crypto:generate_key_pair(),
     Session = signal_session:new(LocalPublic, RemotePublic),
-    
+
     {ok, ChainKey} = signal_crypto:random_bytes(32),
-    SessionWithChainKey = Session#{chain_key => ChainKey, 
-                                   pre_key_id => 1,
-                                   signed_pre_key_id => 2,
-                                   ephemeral_key => <<1:256>>},
+    SessionWithChainKey =
+        Session#{chain_key => ChainKey,
+                 pre_key_id => 1,
+                 signed_pre_key_id => 2,
+                 ephemeral_key => <<1:256>>},
 
     % Test large message
     LargeMessage = binary:copy(<<"A">>, 10000),
-    {ok, EncryptedMessage, EncryptedSession} = signal_session:encrypt(SessionWithChainKey, LargeMessage),
+    {ok, EncryptedMessage, EncryptedSession} =
+        signal_session:encrypt(SessionWithChainKey, LargeMessage),
     {ok, DecryptedMessage, _} = signal_session:decrypt(EncryptedSession, EncryptedMessage),
     ?assertEqual(LargeMessage, DecryptedMessage).
 
@@ -263,10 +265,11 @@ test_decrypt_invalid_header(_Config) ->
     {ok, {LocalPublic, _}} = signal_crypto:generate_key_pair(),
     {ok, {RemotePublic, _}} = signal_crypto:generate_key_pair(),
     Session = signal_session:new(LocalPublic, RemotePublic),
-    
-    SessionWithKeys = Session#{pre_key_id => 1,
-                               signed_pre_key_id => 2,
-                               ephemeral_key => <<1:256>>},
+
+    SessionWithKeys =
+        Session#{pre_key_id => 1,
+                 signed_pre_key_id => 2,
+                 ephemeral_key => <<1:256>>},
 
     % Create message with invalid header
     InvalidHeader = <<999:32, 888:32, 2:256>>, % Wrong IDs
@@ -281,11 +284,12 @@ test_decrypt_missing_message_key(_Config) ->
     {ok, {LocalPublic, _}} = signal_crypto:generate_key_pair(),
     {ok, {RemotePublic, _}} = signal_crypto:generate_key_pair(),
     Session = signal_session:new(LocalPublic, RemotePublic),
-    
-    SessionWithKeys = Session#{pre_key_id => 1,
-                               signed_pre_key_id => 2,
-                               ephemeral_key => <<1:256>>,
-                               message_counter => 5}, % Counter > 0 but no message keys
+
+    SessionWithKeys =
+        Session#{pre_key_id => 1,
+                 signed_pre_key_id => 2,
+                 ephemeral_key => <<1:256>>,
+                 message_counter => 5}, % Counter > 0 but no message keys
 
     % Create valid header but no message key
     ValidHeader = <<1:32, 2:32, 1:256>>,
@@ -293,7 +297,8 @@ test_decrypt_missing_message_key(_Config) ->
     {ok, Ciphertext} = signal_crypto:random_bytes(100),
     MessageWithoutKey = <<ValidHeader/binary, IV/binary, Ciphertext/binary>>,
 
-    {error, message_key_not_found} = signal_session:decrypt(SessionWithKeys, MessageWithoutKey).
+    {error, message_key_not_found} =
+        signal_session:decrypt(SessionWithKeys, MessageWithoutKey).
 
 %% Test verify_bundle_signature function
 test_verify_bundle_signature(_Config) ->
@@ -307,7 +312,8 @@ test_verify_bundle_signature(_Config) ->
 
     % Test with invalid signature
     InvalidSignature = <<0:256>>,
-    {error, invalid_signature} = signal_crypto:verify(PublicKey, DataToSign, InvalidSignature).
+    {error, invalid_signature} =
+        signal_crypto:verify(PublicKey, DataToSign, InvalidSignature).
 
 %% Test calculate_shared_secret function
 test_calculate_shared_secret(_Config) ->
@@ -316,8 +322,10 @@ test_calculate_shared_secret(_Config) ->
     {ok, {PublicKey2, PrivateKey2}} = signal_crypto:generate_curve25519_key_pair(),
 
     % Calculate shared secrets
-    {ok, SharedSecret1} = signal_crypto:compute_key(ecdh, PublicKey1, PrivateKey2, curve25519),
-    {ok, SharedSecret2} = signal_crypto:compute_key(ecdh, PublicKey2, PrivateKey1, curve25519),
+    {ok, SharedSecret1} =
+        signal_crypto:compute_key(ecdh, PublicKey1, PrivateKey2, curve25519),
+    {ok, SharedSecret2} =
+        signal_crypto:compute_key(ecdh, PublicKey2, PrivateKey1, curve25519),
 
     % Both should produce the same shared secret
     ?assertEqual(SharedSecret1, SharedSecret2),
@@ -327,17 +335,20 @@ test_calculate_shared_secret(_Config) ->
 %% Test concurrent session operations
 test_concurrent_sessions(_Config) ->
     % Create multiple sessions concurrently
-    Sessions = lists:map(fun(_) ->
-        {ok, {LocalPublic, _}} = signal_crypto:generate_key_pair(),
-        {ok, {RemotePublic, _}} = signal_crypto:generate_key_pair(),
-        signal_session:new(LocalPublic, RemotePublic)
-    end, lists:seq(1, 10)),
+    Sessions =
+        lists:map(fun(_) ->
+                     {ok, {LocalPublic, _}} = signal_crypto:generate_key_pair(),
+                     {ok, {RemotePublic, _}} = signal_crypto:generate_key_pair(),
+                     signal_session:new(LocalPublic, RemotePublic)
+                  end,
+                  lists:seq(1, 10)),
 
     % Verify all sessions are valid
     lists:foreach(fun(Session) ->
-        ?assert(is_map(Session)),
-        ?assert(is_binary(maps:get(id, Session)))
-    end, Sessions),
+                     ?assert(is_map(Session)),
+                     ?assert(is_binary(maps:get(id, Session)))
+                  end,
+                  Sessions),
 
     % Verify session IDs are unique
     SessionIds = [maps:get(id, Session) || Session <- Sessions],
@@ -348,22 +359,27 @@ test_stress_encryption(_Config) ->
     {ok, {LocalPublic, _}} = signal_crypto:generate_key_pair(),
     {ok, {RemotePublic, _}} = signal_crypto:generate_key_pair(),
     Session = signal_session:new(LocalPublic, RemotePublic),
-    
+
     {ok, ChainKey} = signal_crypto:random_bytes(32),
-    SessionWithChainKey = Session#{chain_key => ChainKey, 
-                                   pre_key_id => 1,
-                                   signed_pre_key_id => 2,
-                                   ephemeral_key => <<1:256>>},
+    SessionWithChainKey =
+        Session#{chain_key => ChainKey,
+                 pre_key_id => 1,
+                 signed_pre_key_id => 2,
+                 ephemeral_key => <<1:256>>},
 
     % Encrypt and decrypt many messages
     Messages = [io_lib:format("Message ~p", [I]) || I <- lists:seq(1, 100)],
-    
-    FinalSession = lists:foldl(fun(Message, AccSession) ->
-        {ok, Encrypted, UpdatedSession} = signal_session:encrypt(AccSession, list_to_binary(Message)),
-        {ok, Decrypted, _} = signal_session:decrypt(UpdatedSession, Encrypted),
-        ?assertEqual(list_to_binary(Message), Decrypted),
-        UpdatedSession
-    end, SessionWithChainKey, Messages),
+
+    FinalSession =
+        lists:foldl(fun(Message, AccSession) ->
+                       {ok, Encrypted, UpdatedSession} =
+                           signal_session:encrypt(AccSession, list_to_binary(Message)),
+                       {ok, Decrypted, _} = signal_session:decrypt(UpdatedSession, Encrypted),
+                       ?assertEqual(list_to_binary(Message), Decrypted),
+                       UpdatedSession
+                    end,
+                    SessionWithChainKey,
+                    Messages),
 
     % Verify final session state
     ?assert(is_map(FinalSession)),
@@ -375,22 +391,24 @@ test_verify_signature_edge_cases(_Config) ->
     {ok, {PublicKey, PrivateKey}} = signal_crypto:generate_key_pair(),
     {ok, Signature} = signal_crypto:sign(PrivateKey, <<>>),
     {ok, true} = signal_crypto:verify(PublicKey, <<>>, Signature),
-    
+
     % Test with large data
     LargeData = binary:copy(<<"A">>, 10000),
     {ok, LargeSignature} = signal_crypto:sign(PrivateKey, LargeData),
     {ok, true} = signal_crypto:verify(PublicKey, LargeData, LargeSignature),
-    
+
     % Test with modified data
     ModifiedData = <<"modified">>,
-    {error, invalid_signature} = signal_crypto:verify(PublicKey, ModifiedData, LargeSignature).
+    {error, invalid_signature} =
+        signal_crypto:verify(PublicKey, ModifiedData, LargeSignature).
 
 %% Test edge cases for compute_key
 test_compute_key_edge_cases(_Config) ->
     % Test with unsupported algorithm
     {ok, {PublicKey, PrivateKey}} = signal_crypto:generate_curve25519_key_pair(),
-    {error, {unsupported_algorithm, rsa, p256}} = signal_crypto:compute_key(rsa, PublicKey, PrivateKey, p256),
-    
+    {error, {unsupported_algorithm, rsa, p256}} =
+        signal_crypto:compute_key(rsa, PublicKey, PrivateKey, p256),
+
     % Test with invalid key sizes
     InvalidKey = <<"invalid">>,
     {error, _} = signal_crypto:compute_key(ecdh, InvalidKey, PrivateKey, curve25519),
@@ -399,25 +417,33 @@ test_compute_key_edge_cases(_Config) ->
 %% Test concurrent operations more thoroughly
 test_concurrent_operations(_Config) ->
     % Create multiple sessions and perform concurrent operations
-    Sessions = lists:map(fun(_) ->
-        {ok, {LocalPublic, _}} = signal_crypto:generate_key_pair(),
-        {ok, {RemotePublic, _}} = signal_crypto:generate_key_pair(),
-        signal_session:new(LocalPublic, RemotePublic)
-    end, lists:seq(1, 20)),
+    Sessions =
+        lists:map(fun(_) ->
+                     {ok, {LocalPublic, _}} = signal_crypto:generate_key_pair(),
+                     {ok, {RemotePublic, _}} = signal_crypto:generate_key_pair(),
+                     signal_session:new(LocalPublic, RemotePublic)
+                  end,
+                  lists:seq(1, 20)),
 
     % Perform concurrent encryption/decryption
     lists:foreach(fun(Session) ->
-        {ok, ChainKey} = signal_crypto:random_bytes(32),
-        SessionWithChainKey = Session#{chain_key => ChainKey, 
-                                       pre_key_id => 1,
-                                       signed_pre_key_id => 2,
-                                       ephemeral_key => <<1:256>>},
-        
-        % Encrypt and decrypt multiple messages
-        lists:foreach(fun(I) ->
-            Message = io_lib:format("Message ~p", [I]),
-            {ok, Encrypted, UpdatedSession} = signal_session:encrypt(SessionWithChainKey, list_to_binary(Message)),
-            {ok, Decrypted, _} = signal_session:decrypt(UpdatedSession, Encrypted),
-            ?assertEqual(list_to_binary(Message), Decrypted)
-        end, lists:seq(1, 10))
-    end, Sessions). 
+                     {ok, ChainKey} = signal_crypto:random_bytes(32),
+                     SessionWithChainKey =
+                         Session#{chain_key => ChainKey,
+                                  pre_key_id => 1,
+                                  signed_pre_key_id => 2,
+                                  ephemeral_key => <<1:256>>},
+
+                     % Encrypt and decrypt multiple messages
+                     lists:foreach(fun(I) ->
+                                      Message = io_lib:format("Message ~p", [I]),
+                                      {ok, Encrypted, UpdatedSession} =
+                                          signal_session:encrypt(SessionWithChainKey,
+                                                                 list_to_binary(Message)),
+                                      {ok, Decrypted, _} =
+                                          signal_session:decrypt(UpdatedSession, Encrypted),
+                                      ?assertEqual(list_to_binary(Message), Decrypted)
+                                   end,
+                                   lists:seq(1, 10))
+                  end,
+                  Sessions).

@@ -130,43 +130,56 @@ test-dirs:
 	mkdir -p tmp/doc
 	mkdir -p tmp/perf
 
+# Platform-specific library path setup
+ifeq ($(shell uname),Darwin)
+    # macOS - handle both Intel and Apple Silicon
+    ifeq ($(shell uname -m),arm64)
+        LIBRARY_PATH_ENV = DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib
+    else
+        LIBRARY_PATH_ENV = DYLD_LIBRARY_PATH=/usr/local/opt/openssl@3/lib
+    endif
+else
+    # Linux/Unix - usually not needed, but set LD_LIBRARY_PATH if required
+    LIBRARY_PATH_ENV = LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/local/lib
+endif
+
 # Run all tests
 test: test-dirs
-	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 ct
+	$(LIBRARY_PATH_ENV) rebar3 ct
 
 # Run unit tests only
 test-unit: test-dirs
-	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 as unit ct
+	$(LIBRARY_PATH_ENV) rebar3 as unit ct
 
 # Run integration tests only
 test-integration: test-dirs
-	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 as integration ct
+	$(LIBRARY_PATH_ENV) rebar3 as integration ct
 
 # Run smoke tests only
 test-smoke: test-dirs
-	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 as smoke ct
+	$(LIBRARY_PATH_ENV) rebar3 as smoke ct
 
 # Run tests with coverage
 test-cover: test-dirs
-	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 ct --cover
+	$(LIBRARY_PATH_ENV) rebar3 ct --cover
 
 # Run unit tests with coverage
 test-unit-cover: test-dirs
-	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 as unit ct --cover
+	$(LIBRARY_PATH_ENV) rebar3 as unit ct --cover
 
 # Run integration tests with coverage
 test-integration-cover: test-dirs
-	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib rebar3 as integration ct --cover
+	$(LIBRARY_PATH_ENV) rebar3 as integration ct --cover
 
 # Run performance tests
 perf-test: test-dirs build
 	@echo "Running performance benchmarks..."
-	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib erl -noshell -pa ebin -pa test -eval "performance_test:run_benchmarks(), halt()."
+	$(LIBRARY_PATH_ENV) erl -noshell -pa ebin -pa test -eval "performance_test:run_benchmarks(), halt()."
 
 # Run performance monitoring
 perf-monitor: test-dirs build
 	@echo "Starting performance monitoring..."
-	DYLD_LIBRARY_PATH=/opt/homebrew/opt/openssl@3/lib erl -noshell -pa ebin -pa test -eval "performance_test:run_benchmarks(), timer:sleep(5000), performance_test:run_benchmarks(), halt()."
+	$(LIBRARY_PATH_ENV) erl -noshell -pa ebin -pa test -eval "performance_test:run_benchmarks(), timer:sleep(5000), performance_test:run_benchmarks(), halt()."
 
 # Generate documentation
 docs: test-dirs
@@ -262,7 +275,7 @@ monitor-cache:
 
 # CI-specific test target
 ci-test: test-dirs
-	rebar3 ct --cover --verbose
+	$(LIBRARY_PATH_ENV) rebar3 ct --cover --verbose
 
 # Help target
 help:

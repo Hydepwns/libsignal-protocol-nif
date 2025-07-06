@@ -3,4 +3,4 @@
 -export([placeholder/0]).
 
 placeholder() ->
-    ok. 
+    ok.

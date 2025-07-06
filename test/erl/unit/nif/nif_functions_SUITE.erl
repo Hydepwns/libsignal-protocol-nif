@@ -83,7 +83,8 @@ test_generate_pre_key(_Config) ->
 
 test_generate_signed_pre_key(_Config) ->
     % Generate identity key for signing
-    {ok, {IdentityPublic, IdentityPrivate}} = libsignal_protocol_nif:generate_identity_key_pair(),
+    {ok, {IdentityPublic, IdentityPrivate}} =
+        libsignal_protocol_nif:generate_identity_key_pair(),
 
     % Test signed pre-key generation
     KeyIds = [1, 100, 1000],
@@ -125,7 +126,12 @@ test_process_pre_key_bundle(_Config) ->
     {ok, Session} = libsignal_protocol_nif:create_session(IdentityKey),
 
     % Create pre-key bundle (serialize to binary for C NIF)
-    Bundle = term_to_binary({123, 456, {PreKeyId, PreKey}, {SignedPreKeyId, SignedPreKey, Signature}, IdentityKey}),
+    Bundle =
+        term_to_binary({123,
+                        456,
+                        {PreKeyId, PreKey},
+                        {SignedPreKeyId, SignedPreKey, Signature},
+                        IdentityKey}),
 
     % Process bundle (current C NIF implementation just returns ok)
     ok = libsignal_protocol_nif:process_pre_key_bundle(Session, Bundle).
@@ -139,7 +145,12 @@ test_encrypt_decrypt_message(_Config) ->
     {ok, Session} = libsignal_protocol_nif:create_session(IdentityKey),
 
     % Process bundle to establish session (serialize to binary for C NIF)
-    Bundle = term_to_binary({123, 456, {PreKeyId, PreKey}, {SignedPreKeyId, SignedPreKey, Signature}, IdentityKey}),
+    Bundle =
+        term_to_binary({123,
+                        456,
+                        {PreKeyId, PreKey},
+                        {SignedPreKeyId, SignedPreKey, Signature},
+                        IdentityKey}),
     ok = libsignal_protocol_nif:process_pre_key_bundle(Session, Bundle),
 
     % Test various message sizes
@@ -157,7 +168,8 @@ test_encrypt_decrypt_message(_Config) ->
          ?assert(byte_size(EncryptedMessage) > 0),
 
          % Decrypt message
-         {ok, DecryptedMessage} = libsignal_protocol_nif:decrypt_message(Session, EncryptedMessage),
+         {ok, DecryptedMessage} =
+             libsignal_protocol_nif:decrypt_message(Session, EncryptedMessage),
          ?assertEqual(Message, DecryptedMessage)
      end
      || Message <- Messages].
@@ -180,7 +192,6 @@ test_cache_operations(_Config) ->
 test_error_handling(_Config) ->
     % Note: Current C NIF implementation doesn't validate inputs properly
     % These tests verify the current behavior, not ideal behavior
-    
     % Test inputs that should be invalid but currently work
     {ok, {-1, _}} = libsignal_protocol_nif:generate_pre_key(-1),
     {ok, {1, _, _}} = libsignal_protocol_nif:generate_signed_pre_key(<<>>, 1),
@@ -189,7 +200,8 @@ test_error_handling(_Config) ->
     % Test invalid session operations (these should work with current implementation)
     InvalidSession = <<"invalid_session_data">>,
     {ok, _} = libsignal_protocol_nif:encrypt_message(InvalidSession, <<"test">>),
-    {error, invalid_message} = libsignal_protocol_nif:decrypt_message(InvalidSession, <<"test">>),
+    {error, invalid_message} =
+        libsignal_protocol_nif:decrypt_message(InvalidSession, <<"test">>),
     {ok, _} = libsignal_protocol_nif:get_cache_stats(InvalidSession).
 
 test_concurrent_operations(_Config) ->
@@ -201,7 +213,8 @@ test_concurrent_operations(_Config) ->
         [spawn(fun() ->
                   Keys =
                       [begin
-                           {ok, {PublicKey, PrivateKey}} = libsignal_protocol_nif:generate_identity_key_pair(),
+                           {ok, {PublicKey, PrivateKey}} =
+                               libsignal_protocol_nif:generate_identity_key_pair(),
                            {PublicKey, PrivateKey}
                        end
                        || _ <- lists:seq(1, NumKeysPerProcess)],
@@ -231,7 +244,12 @@ test_large_messages(_Config) ->
     {ok, Session} = libsignal_protocol_nif:create_session(IdentityKey),
 
     % Process bundle (serialize to binary for C NIF)
-    Bundle = term_to_binary({123, 456, {PreKeyId, PreKey}, {SignedPreKeyId, SignedPreKey, Signature}, IdentityKey}),
+    Bundle =
+        term_to_binary({123,
+                        456,
+                        {PreKeyId, PreKey},
+                        {SignedPreKeyId, SignedPreKey, Signature},
+                        IdentityKey}),
     ok = libsignal_protocol_nif:process_pre_key_bundle(Session, Bundle),
 
     % Test large messages
@@ -271,7 +289,12 @@ test_session_persistence(_Config) ->
     {ok, Session} = libsignal_protocol_nif:create_session(IdentityKey),
 
     % Process bundle (serialize to binary for C NIF)
-    Bundle = term_to_binary({123, 456, {PreKeyId, PreKey}, {SignedPreKeyId, SignedPreKey, Signature}, IdentityKey}),
+    Bundle =
+        term_to_binary({123,
+                        456,
+                        {PreKeyId, PreKey},
+                        {SignedPreKeyId, SignedPreKey, Signature},
+                        IdentityKey}),
     ok = libsignal_protocol_nif:process_pre_key_bundle(Session, Bundle),
 
     % Test multiple encrypt/decrypt operations with same session
