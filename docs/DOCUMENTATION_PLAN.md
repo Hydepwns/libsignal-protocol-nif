@@ -91,7 +91,7 @@ This document outlines the documentation updates needed for the complete Signal 
 
 #### 4.1 Comparison Guide
 
-- [ ] **Language Comparison** (`docs/LANGUAGE_COMPARISON.md`)
+- [x] ✅ **Language Comparison** (`docs/CROSS_LANGUAGE_COMPARISON.md`)
   - Feature comparison between wrappers
   - Performance benchmarks
   - Use case recommendations

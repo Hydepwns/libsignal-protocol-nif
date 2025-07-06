@@ -97,6 +97,7 @@ ok = signal_nif:verify_signature(PublicKey, Message, Signature).
 ## Documentation
 
 - [📚 Complete API Reference](docs/API.md) - Detailed documentation for all NIF functions
+- [🌐 Cross-Language Comparison](docs/CROSS_LANGUAGE_COMPARISON.md) - Compare Erlang, Elixir, and Gleam wrappers
 - [🏗️ Architecture Guide](docs/ARCHITECTURE.md) - System design and implementation details
 - [🔒 Security Considerations](docs/SECURITY.md) - Cryptographic security and best practices
 - [🚀 Getting Started](docs/IMMEDIATE_ACTIONS.md) - Quick start guide and immediate actions
@@ -151,3 +152,5 @@ All wrappers use the same underlying NIF implementation, ensuring:
 - Shared memory efficiency through NIFs
 - Identical performance characteristics
 - Cross-language session compatibility
+
+For detailed comparisons and migration guides, see our [Cross-Language Comparison](docs/CROSS_LANGUAGE_COMPARISON.md) documentation.
