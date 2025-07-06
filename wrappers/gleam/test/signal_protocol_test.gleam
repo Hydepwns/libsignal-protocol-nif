@@ -2,8 +2,8 @@ import gleam/erlang
 import gleeunit
 import gleeunit/should
 import signal_protocol
-import signal_protocol/pre_key_bundle
-import signal_protocol/session
+import pre_key_bundle
+import session
 
 pub fn main() {
   gleeunit.main()

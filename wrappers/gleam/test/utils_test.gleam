@@ -2,7 +2,7 @@ import gleam/erlang
 import gleeunit
 import gleeunit/should
 import signal_protocol
-import signal_protocol/utils
+import utils
 
 pub fn main() {
   gleeunit.main()

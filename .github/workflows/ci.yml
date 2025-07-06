@@ -125,7 +125,7 @@ jobs:
     - name: Install Gleam
       if: matrix.wrapper == 'gleam'
       run: |
-        curl -sSL https://github.com/gleam-lang/gleam/releases/download/v0.32.4/gleam-v0.32.4-x86_64-unknown-linux-musl.tar.gz | tar -xz
+        curl -sSL https://github.com/gleam-lang/gleam/releases/download/v1.0.0/gleam-v1.0.0-x86_64-unknown-linux-musl.tar.gz | tar -xz
         sudo mv gleam /usr/local/bin/
         gleam --version
     
