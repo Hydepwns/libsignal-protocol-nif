@@ -51,12 +51,11 @@ defmodule LibsignalProtocol.MixProject do
     ]
   end
 
-  # Ensure the NIF is built and cleaned like in rebar.config
-  # The NIF is expected at priv/libsignal_protocol_nif.so
+  # NIF is expected to be built separately by CI
   defp aliases do
     [
-      compile: ["cmd make -C ../../c_src build", "compile"],
-      clean: ["cmd make -C ../../c_src clean", "clean"]
+      compile: ["compile"],
+      clean: ["clean"]
     ]
   end
-end 
+end
