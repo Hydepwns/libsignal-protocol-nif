@@ -1,10 +1,13 @@
 # libsignal-protocol-nif
 
 [![Hex.pm](https://img.shields.io/hexpm/v/libsignal_protocol_nif.svg)](https://hex.pm/packages/libsignal_protocol_nif)
+[![Hex.pm](https://img.shields.io/hexpm/dt/libsignal_protocol_nif.svg)](https://hex.pm/packages/libsignal_protocol_nif)
 [![Hex.pm](https://img.shields.io/hexpm/v/libsignal_protocol.svg)](https://hex.pm/packages/libsignal_protocol)
+[![Hex.pm](https://img.shields.io/hexpm/dt/libsignal_protocol.svg)](https://hex.pm/packages/libsignal_protocol)
 [![Hex.pm](https://img.shields.io/hexpm/v/libsignal_protocol_gleam.svg)](https://hex.pm/packages/libsignal_protocol_gleam)
+[![Hex.pm](https://img.shields.io/hexpm/dt/libsignal_protocol_gleam.svg)](https://hex.pm/packages/libsignal_protocol_gleam)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/hydepwns/libsignal-protocol-nif)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 Erlang NIF implementing Signal Protocol cryptographic primitives with libsodium.
 
