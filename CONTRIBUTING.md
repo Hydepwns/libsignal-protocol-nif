@@ -32,13 +32,14 @@ Thank you for your interest in contributing to libsignal-protocol-nif! This docu
    ```
 
 4. **Run tests:**
+
    ```bash
    make test-unit
    ```
 
 ## 🏗️ Project Structure
 
-```
+```bash
 libsignal-protocol-nif/
 ├── c_src/                    # C NIF implementation
 │   ├── crypto/              # Cryptographic operations

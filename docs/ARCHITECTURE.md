@@ -30,7 +30,7 @@ libsignal-protocol-nif is a high-performance Erlang NIF (Native Implemented Func
 
 ### High-Level Architecture
 
-```
+```bash
 ┌─────────────────────────────────────────────────────────────┐
 │                    Erlang/Elixir/Gleam                     │
 │                     Application Layer                       │
@@ -54,7 +54,7 @@ libsignal-protocol-nif is a high-performance Erlang NIF (Native Implemented Func
 
 ### Directory Structure
 
-```
+```bash
 libsignal-protocol-nif/
 ├── c_src/                          # C NIF implementation
 │   ├── libsignal_protocol_nif.c    # Main NIF entry points
