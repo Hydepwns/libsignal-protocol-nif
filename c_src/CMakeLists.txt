@@ -37,9 +37,15 @@ add_library(libsignal_protocol_nif SHARED
     libsignal_protocol_nif.c
 )
 
-# Link libsodium to both libraries
+# Add the new v2 libsignal_protocol_nif_v2 library with clean function table
+add_library(libsignal_protocol_nif_v2 SHARED
+    libsignal_protocol_nif_v2.c
+)
+
+# Link libsodium to all libraries
 target_link_libraries(signal_nif ${SODIUM_LIBRARY})
 target_link_libraries(libsignal_protocol_nif ${SODIUM_LIBRARY})
+target_link_libraries(libsignal_protocol_nif_v2 ${SODIUM_LIBRARY})
 
 # Set output directory and name for signal_nif
 set_target_properties(signal_nif PROPERTIES
@@ -55,12 +61,22 @@ set_target_properties(libsignal_protocol_nif PROPERTIES
     PREFIX ""  # Remove the "lib" prefix
 )
 
+# Set output directory and name for libsignal_protocol_nif_v2
+set_target_properties(libsignal_protocol_nif_v2 PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/../priv"
+    OUTPUT_NAME "libsignal_protocol_nif_v2"
+    PREFIX ""  # Remove the "lib" prefix
+)
+
 # Set compile flags based on platform
 if(APPLE)
     set_target_properties(signal_nif PROPERTIES
         SUFFIX ".dylib"
     )
     set_target_properties(libsignal_protocol_nif PROPERTIES
+        SUFFIX ".dylib"
+    )
+    set_target_properties(libsignal_protocol_nif_v2 PROPERTIES
         SUFFIX ".dylib"
     )
 elseif(UNIX)
@@ -70,11 +86,17 @@ elseif(UNIX)
     set_target_properties(libsignal_protocol_nif PROPERTIES
         SUFFIX ".so"
     )
+    set_target_properties(libsignal_protocol_nif_v2 PROPERTIES
+        SUFFIX ".so"
+    )
 elseif(WIN32)
     set_target_properties(signal_nif PROPERTIES
         SUFFIX ".dll"
     )
     set_target_properties(libsignal_protocol_nif PROPERTIES
+        SUFFIX ".dll"
+    )
+    set_target_properties(libsignal_protocol_nif_v2 PROPERTIES
         SUFFIX ".dll"
     )
 endif() 
