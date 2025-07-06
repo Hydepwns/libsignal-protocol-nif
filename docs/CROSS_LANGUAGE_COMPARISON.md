@@ -370,7 +370,7 @@ pub fn generate_curve25519_keypair() -> Result(KeyPair, Error) {
 
 ## Decision Guide
 
-### Choose Erlang If:
+### Choose Erlang If
 
 - ✅ You're building a performance-critical application
 - ✅ You have an existing Erlang codebase
@@ -378,7 +378,7 @@ pub fn generate_curve25519_keypair() -> Result(KeyPair, Error) {
 - ✅ You're comfortable with Erlang's syntax and patterns
 - ✅ You want minimal abstraction overhead
 
-### Choose Elixir If:
+### Choose Elixir If
 
 - ✅ You're building a new application
 - ✅ You want excellent developer experience
@@ -386,7 +386,7 @@ pub fn generate_curve25519_keypair() -> Result(KeyPair, Error) {
 - ✅ You want comprehensive documentation
 - ✅ You're building web applications or APIs
 
-### Choose Gleam If:
+### Choose Gleam If
 
 - ✅ You need maximum type safety
 - ✅ You're building safety-critical systems
@@ -430,6 +430,7 @@ pub fn generate_curve25519_keypair() -> Result(KeyPair, Error) {
    ```
 
 3. **Update error handling:**
+
    ```erlang
    % Erlang
    case signal_nif:some_function() of
@@ -437,6 +438,7 @@ pub fn generate_curve25519_keypair() -> Result(KeyPair, Error) {
        {error, Reason} -> handle_error(Reason)
    end.
    ```
+
    ```elixir
    # Elixir
    case SignalProtocol.some_function() do
@@ -467,6 +469,7 @@ pub fn generate_curve25519_keypair() -> Result(KeyPair, Error) {
    ```
 
 3. **Update error handling:**
+
    ```elixir
    # Elixir
    case SignalProtocol.some_function() do
@@ -474,6 +477,7 @@ pub fn generate_curve25519_keypair() -> Result(KeyPair, Error) {
      {:error, reason} -> handle_error(reason)
    end
    ```
+
    ```gleam
    // Gleam
    case signal_protocol.some_function() {
@@ -505,6 +509,7 @@ pub fn generate_curve25519_keypair() -> Result(KeyPair, Error) {
    ```
 
 3. **Update error handling:**
+
    ```gleam
    // Gleam
    case signal_protocol.some_function() {
@@ -512,6 +517,7 @@ pub fn generate_curve25519_keypair() -> Result(KeyPair, Error) {
      Error(reason) -> handle_error(reason)
    }
    ```
+
    ```erlang
    % Erlang
    case signal_nif:some_function() of
