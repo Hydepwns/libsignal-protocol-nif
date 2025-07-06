@@ -1,5 +1,11 @@
 # libsignal-protocol-nif
 
+[![Hex.pm](https://img.shields.io/hexpm/v/libsignal_protocol_nif.svg)](https://hex.pm/packages/libsignal_protocol_nif)
+[![Hex.pm](https://img.shields.io/hexpm/v/libsignal_protocol.svg)](https://hex.pm/packages/libsignal_protocol)
+[![Hex.pm](https://img.shields.io/hexpm/v/libsignal_protocol_gleam.svg)](https://hex.pm/packages/libsignal_protocol_gleam)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/hydepwns/libsignal-protocol-nif)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Erlang NIF implementing Signal Protocol cryptographic primitives with libsodium.
 
 > Jul-06 Status: ✅ CRYPTO IMPLEMENTATION COMPLETE
@@ -84,3 +90,53 @@ ok = signal_nif:verify_signature(PublicKey, Message, Signature).
 - **Signature Size**: Ed25519 signatures are 64 bytes
 - **Memory Management**: Secure memory clearing with `sodium_memzero()`
 - **Error Handling**: Comprehensive error checking and reporting
+
+## Language Wrappers
+
+This project provides Signal Protocol implementations for multiple BEAM languages:
+
+### Elixir Wrapper (`libsignal_protocol`)
+
+The Elixir wrapper provides idiomatic Elixir APIs for Signal Protocol operations.
+
+```elixir
+# Add to mix.exs
+def deps do
+  [
+    {:libsignal_protocol, "~> 0.1.0"}
+  ]
+end
+```
+
+**Available Modules:**
+
+- `SignalProtocol` - Core cryptographic operations
+- `Session` - Session management and key exchange
+- `PreKeyBundle` - Pre-key bundle handling
+- `LibsignalProtocol` - Main interface module
+
+### Gleam Wrapper (`libsignal_protocol_gleam`)
+
+The Gleam wrapper provides type-safe Signal Protocol operations with Gleam's type system.
+
+```toml
+# Add to gleam.toml
+[dependencies]
+libsignal_protocol_gleam = "~> 0.1.0"
+```
+
+**Available Modules:**
+
+- `signal_protocol` - Core cryptographic operations
+- `session` - Session management and key exchange
+- `pre_key_bundle` - Pre-key bundle handling
+- `utils` - Utility functions and type conversions
+
+### Cross-Language Compatibility
+
+All wrappers use the same underlying NIF implementation, ensuring:
+
+- Consistent cryptographic behavior across languages
+- Shared memory efficiency through NIFs
+- Identical performance characteristics
+- Cross-language session compatibility
