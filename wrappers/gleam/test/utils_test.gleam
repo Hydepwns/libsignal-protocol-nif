@@ -19,7 +19,7 @@ pub fn test_generate_user_keys() {
       should.equal(bit_array.byte_size(signed_pre_key.public_key) > 0, True)
       should.equal(bit_array.byte_size(signed_pre_key.signature) > 0, True)
     }
-    Error(e) -> should.fail("Failed to generate user keys: " <> e)
+    Error(_e) -> should.fail()
   }
 }
 
@@ -27,7 +27,12 @@ pub fn test_create_user_bundle() {
   case utils.generate_user_keys() {
     Ok(#(identity_key_pair, pre_key, signed_pre_key)) -> {
       case
-        utils.create_user_bundle(1, identity_key_pair.public_key, pre_key, signed_pre_key)
+        utils.create_user_bundle(
+          1,
+          identity_key_pair.public_key,
+          pre_key,
+          signed_pre_key,
+        )
       {
         Ok(bundle) -> {
           should.equal(bundle.registration_id, 1)
@@ -39,10 +44,10 @@ pub fn test_create_user_bundle() {
             signed_pre_key.signature,
           ))
         }
-        Error(e) -> should.fail("Failed to create user bundle: " <> e)
+        Error(_e) -> should.fail()
       }
     }
-    Error(e) -> should.fail("Failed to generate user keys: " <> e)
+    Error(_e) -> should.fail()
   }
 }
 
@@ -64,16 +69,22 @@ pub fn test_establish_session() {
             )
           {
             Ok(#(local_session, remote_session)) -> {
-              should.equal(bit_array.byte_size(local_session.reference) > 0, True)
-              should.equal(bit_array.byte_size(remote_session.reference) > 0, True)
+              should.equal(
+                bit_array.byte_size(local_session.reference) > 0,
+                True,
+              )
+              should.equal(
+                bit_array.byte_size(remote_session.reference) > 0,
+                True,
+              )
             }
-            Error(e) -> should.fail("Failed to establish session: " <> e)
+            Error(_e) -> should.fail()
           }
         }
-        Error(e) -> should.fail("Failed to generate remote user keys: " <> e)
+        Error(_e) -> should.fail()
       }
     }
-    Error(e) -> should.fail("Failed to generate local user keys: " <> e)
+    Error(_e) -> should.fail()
   }
 }
 
@@ -113,20 +124,19 @@ pub fn test_message_exchange() {
                         True,
                       )
                     }
-                    Error(e) ->
-                      should.fail("Message verification failed: " <> e)
+                    Error(_e) -> should.fail()
                   }
                 }
-                Error(e) -> should.fail("Failed to exchange messages: " <> e)
+                Error(_e) -> should.fail()
               }
             }
-            Error(e) -> should.fail("Failed to establish session: " <> e)
+            Error(_e) -> should.fail()
           }
         }
-        Error(e) -> should.fail("Failed to generate remote user keys: " <> e)
+        Error(_e) -> should.fail()
       }
     }
-    Error(e) -> should.fail("Failed to generate local user keys: " <> e)
+    Error(_e) -> should.fail()
   }
 }
 
@@ -167,26 +177,26 @@ pub fn test_send_receive_with_session() {
                             True,
                           )
                           should.equal(
-                            bit_array.byte_size(new_remote_session.reference) > 0,
+                            bit_array.byte_size(new_remote_session.reference)
+                              > 0,
                             True,
                           )
                         }
-                        Error(e) ->
-                          should.fail("Message verification failed: " <> e)
+                        Error(_e) -> should.fail()
                       }
                     }
-                    Error(e) -> should.fail("Failed to receive message: " <> e)
+                    Error(_e) -> should.fail()
                   }
                 }
-                Error(e) -> should.fail("Failed to send message: " <> e)
+                Error(_e) -> should.fail()
               }
             }
-            Error(e) -> should.fail("Failed to establish session: " <> e)
+            Error(_e) -> should.fail()
           }
         }
-        Error(e) -> should.fail("Failed to generate remote user keys: " <> e)
+        Error(_e) -> should.fail()
       }
     }
-    Error(e) -> should.fail("Failed to generate local user keys: " <> e)
+    Error(_e) -> should.fail()
   }
 }

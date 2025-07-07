@@ -12,14 +12,19 @@ pub fn test_create_session() {
     Ok(local_identity) -> {
       case signal_protocol.generate_identity_key_pair() {
         Ok(remote_identity) -> {
-          case session.create(local_identity.public_key, remote_identity.public_key) {
+          case
+            session.create(
+              local_identity.public_key,
+              remote_identity.public_key,
+            )
+          {
             Ok(_session) -> should.equal(True, True)
-            Error(e) -> should.fail("Failed to create session: " <> e)
+            Error(_e) -> should.fail()
           }
         }
-        Error(e) -> should.fail("Failed to generate remote identity: " <> e)
+        Error(_e) -> should.fail()
       }
     }
-    Error(e) -> should.fail("Failed to generate local identity: " <> e)
+    Error(_e) -> should.fail()
   }
-} 
+}

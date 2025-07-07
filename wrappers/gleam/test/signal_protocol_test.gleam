@@ -13,7 +13,7 @@ pub fn test_generate_identity_key_pair() {
       should.equal(bit_array.byte_size(identity_key_pair.public_key) > 0, True)
       should.equal(bit_array.byte_size(identity_key_pair.signature) > 0, True)
     }
-    Error(e) -> should.fail("Failed to generate identity key pair: " <> e)
+    Error(_e) -> should.fail()
   }
 }
 
@@ -23,7 +23,7 @@ pub fn test_generate_pre_key() {
       should.equal(pre_key.key_id, 1)
       should.equal(bit_array.byte_size(pre_key.public_key) > 0, True)
     }
-    Error(e) -> should.fail("Failed to generate pre-key: " <> e)
+    Error(_e) -> should.fail()
   }
 }
 
@@ -38,10 +38,10 @@ pub fn test_generate_signed_pre_key() {
           should.equal(bit_array.byte_size(signed_pre_key.public_key) > 0, True)
           should.equal(bit_array.byte_size(signed_pre_key.signature) > 0, True)
         }
-        Error(e) -> should.fail("Failed to generate signed pre-key: " <> e)
+        Error(_e) -> should.fail()
       }
     }
-    Error(e) -> should.fail("Failed to generate identity key pair: " <> e)
+    Error(_e) -> should.fail()
   }
 }
 
@@ -52,10 +52,10 @@ pub fn test_create_session() {
         Ok(session) -> {
           should.equal(bit_array.byte_size(session.reference) > 0, True)
         }
-        Error(e) -> should.fail("Failed to create session: " <> e)
+        Error(_e) -> should.fail()
       }
     }
-    Error(e) -> should.fail("Failed to generate identity key pair: " <> e)
+    Error(_e) -> should.fail()
   }
 }
 
@@ -71,17 +71,13 @@ pub fn test_encrypt_message() {
               // Note: We can't decrypt with the current simplified implementation
               // This is expected for the basic test
             }
-            Error(_e) -> {
-              // This is expected since we're using a simplified session
-              // The important thing is that we can create the session
-              should.equal(True, True)
-            }
+            Error(_e) -> should.fail()
           }
         }
-        Error(e) -> should.fail("Failed to create session: " <> e)
+        Error(_e) -> should.fail()
       }
     }
-    Error(e) -> should.fail("Failed to generate identity key pair: " <> e)
+    Error(_e) -> should.fail()
   }
 }
 
@@ -99,16 +95,19 @@ pub fn test_basic_functionality() {
           {
             Ok(signed_pre_key) -> {
               // All key generation successful
-              should.equal(bit_array.byte_size(identity_key_pair.public_key) > 0, True)
+              should.equal(
+                bit_array.byte_size(identity_key_pair.public_key) > 0,
+                True,
+              )
               should.equal(pre_key.key_id, 1)
               should.equal(signed_pre_key.key_id, 1)
             }
-            Error(e) -> should.fail("Failed to generate signed pre-key: " <> e)
+            Error(_e) -> should.fail()
           }
         }
-        Error(e) -> should.fail("Failed to generate pre-key: " <> e)
+        Error(_e) -> should.fail()
       }
     }
-    Error(e) -> should.fail("Failed to generate identity key pair: " <> e)
+    Error(_e) -> should.fail()
   }
 }
