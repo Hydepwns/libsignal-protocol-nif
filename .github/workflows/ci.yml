@@ -128,7 +128,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        wrapper: [elixir, gleam]
+        wrapper: [elixir]
     
     steps:
     - uses: actions/checkout@v4.1.1
@@ -142,12 +142,7 @@ jobs:
         install-hex: true
         install-rebar: true
     
-    - name: Install Gleam
-      if: matrix.wrapper == 'gleam'
-      run: |
-        curl -sSL https://github.com/gleam-lang/gleam/releases/download/v1.11.0/gleam-v1.11.0-x86_64-unknown-linux-musl.tar.gz | tar -xz
-        sudo mv gleam /usr/local/bin/
-        gleam --version
+
     
     - name: Install system dependencies
       run: |
@@ -202,33 +197,7 @@ jobs:
           mix test --trace --max-failures 1 || echo "Tests failed but continuing CI"
         }
     
-    - name: Test Gleam wrapper
-      if: matrix.wrapper == 'gleam'
-      run: |
-        cd wrappers/gleam
-        # Copy NIF files to wrapper priv directory
-        mkdir -p priv
-        cp -f ../../priv/*.so priv/ 2>/dev/null || cp -f ../../priv/*.dylib priv/ 2>/dev/null || cp -f ../../priv/*.dll priv/ 2>/dev/null || echo "No NIF files found to copy"
-        ls -la priv/
-        echo "Downloading dependencies..."
-        gleam deps download
-        echo "Building..."
-        gleam build || {
-          echo "Build failed, checking for dependency issues..."
-          echo "Gleam version: $(gleam --version)"
-          echo "Dependencies:"
-          cat gleam.toml
-          echo "Retrying build..."
-          gleam build
-        }
-        echo "Running tests..."
-        gleam test || {
-          echo "Tests failed, checking for NIF loading issues..."
-          echo "Available NIF files:"
-          find ../../ -name "*.so" -o -name "*.dylib" -o -name "*.dll" | head -10
-          echo "Continuing with build verification..."
-          gleam check
-        }
+
 
   security:
     name: Security scan
@@ -334,20 +303,6 @@ jobs:
         cd wrappers/elixir
         mix deps.get
         mix hex.publish --yes
-    
-    - name: Install Gleam for publishing
-      run: |
-        curl -sSL https://github.com/gleam-lang/gleam/releases/download/v1.11.0/gleam-v1.11.0-x86_64-unknown-linux-musl.tar.gz | tar -xz
-        sudo mv gleam /usr/local/bin/
-        gleam --version
-    
-    - name: Publish Gleam package
-      env:
-        HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
-      run: |
-        cd wrappers/gleam
-        gleam deps download
-        gleam publish --yes
 
   docker:
     name: Build and test Docker images
