@@ -19,14 +19,15 @@ jobs:
     strategy:
       fail-fast: false  # Don't cancel other jobs if one fails
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]
         otp: ['24.3', '25.3', '26.2']
-        exclude:
-          # macOS builds are expensive, only test latest OTP
-          - os: macos-latest
-            otp: '24.3'
-          - os: macos-latest
-            otp: '25.3'
+        # TODO: Re-enable macOS once setup-beam supports it properly
+        # exclude:
+        #   # macOS builds are expensive, only test latest OTP
+        #   - os: macos-latest
+        #     otp: '24.3'
+        #   - os: macos-latest
+        #     otp: '25.3'
     
     steps:
     - uses: actions/checkout@v4.1.1
@@ -36,20 +37,13 @@ jobs:
       with:
         otp-version: ${{ matrix.otp }}
         rebar3-version: '3.22.1'
+        install-hex: true
+        install-rebar: true
     
-    - name: Install system dependencies (Ubuntu)
-      if: matrix.os == 'ubuntu-latest'
+    - name: Install system dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y libsodium-dev cmake build-essential pkg-config
-        # Verify installations
-        cmake --version
-        pkg-config --exists libsodium && echo "libsodium found" || echo "libsodium not found"
-    
-    - name: Install system dependencies (macOS)
-      if: matrix.os == 'macos-latest'
-      run: |
-        brew install libsodium cmake pkg-config
         # Verify installations
         cmake --version
         pkg-config --exists libsodium && echo "libsodium found" || echo "libsodium not found"
@@ -87,21 +81,11 @@ jobs:
       run: |
         echo "Running unit tests..."
         make test-unit
-      # Add retry logic for macOS tests due to potential flakiness
-      continue-on-error: ${{ matrix.os == 'macos-latest' }}
-    
-    - name: Retry unit tests on macOS (if failed)
-      if: failure() && matrix.os == 'macos-latest'
-      run: |
-        echo "Retrying unit tests on macOS..."
-        sleep 5
-        make test-unit
     
     - name: Run integration tests
       run: |
         echo "Running integration tests..."
         make test-integration
-      continue-on-error: ${{ matrix.os == 'macos-latest' }}
     
     - name: Generate coverage report
       run: |
@@ -135,6 +119,8 @@ jobs:
         otp-version: '26.2'
         elixir-version: '1.15.7'
         rebar3-version: '3.22.1'
+        install-hex: true
+        install-rebar: true
     
     - name: Install Gleam
       if: matrix.wrapper == 'gleam'
@@ -154,11 +140,16 @@ jobs:
     - name: Build main NIF
       run: |
         echo "Building main NIF..."
+        # First compile Erlang components to ensure NIF is built
+        rebar3 compile
+        # Then build C components
         cd c_src
         cmake . -DCMAKE_BUILD_TYPE=Release
         make
         cd ..
         ls -la priv/
+        echo "NIF files built:"
+        find priv/ -name "*.so" -o -name "*.dll" -o -name "*.dylib" | head -10
     
     - name: Test Elixir wrapper
       if: matrix.wrapper == 'elixir'
@@ -166,10 +157,14 @@ jobs:
         cd wrappers/elixir
         # Copy NIF files to wrapper priv directory
         mkdir -p priv
-        cp -f ../../priv/*.so priv/ || true
+        cp -f ../../priv/*.so priv/ 2>/dev/null || cp -f ../../priv/*.dylib priv/ 2>/dev/null || cp -f ../../priv/*.dll priv/ 2>/dev/null || echo "No NIF files found to copy"
+        ls -la priv/
+        echo "Installing dependencies..."
         mix deps.get
+        echo "Compiling..."
         mix compile
-        mix test
+        echo "Running tests..."
+        mix test --trace
     
     - name: Test Gleam wrapper
       if: matrix.wrapper == 'gleam'
@@ -177,9 +172,13 @@ jobs:
         cd wrappers/gleam
         # Copy NIF files to wrapper priv directory
         mkdir -p priv
-        cp -f ../../priv/*.so priv/ || true
+        cp -f ../../priv/*.so priv/ 2>/dev/null || cp -f ../../priv/*.dylib priv/ 2>/dev/null || cp -f ../../priv/*.dll priv/ 2>/dev/null || echo "No NIF files found to copy"
+        ls -la priv/
+        echo "Downloading dependencies..."
         gleam deps download
+        echo "Building..."
         gleam build
+        echo "Running tests..."
         gleam test
 
   security:
@@ -217,6 +216,8 @@ jobs:
       with:
         otp-version: '26.2'
         rebar3-version: '3.22.1'
+        install-hex: true
+        install-rebar: true
     
     - name: Install system dependencies
       run: |
@@ -254,6 +255,8 @@ jobs:
         otp-version: '26.2'
         elixir-version: '1.15.7'
         rebar3-version: '3.22.1'
+        install-hex: true
+        install-rebar: true
     
     - name: Install system dependencies
       run: |
