@@ -19,18 +19,18 @@ pub fn test_create_bundle() {
                 identity_key_pair.public_key,
                 pre_key,
                 signed_pre_key,
-                "base_key_placeholder",
+                <<"base_key_placeholder":utf8>>,
               ) {
                 Ok(_bundle) -> should.equal(True, True)
-                Error(e) -> should.fail("Failed to create bundle: " <> e)
+                Error(_e) -> panic("Failed to create bundle")
               }
             }
-            Error(e) -> should.fail("Failed to generate signed pre-key: " <> e)
+            Error(_e) -> panic("Failed to generate signed pre-key")
           }
         }
-        Error(e) -> should.fail("Failed to generate pre-key: " <> e)
+        Error(_e) -> panic("Failed to generate pre-key")
       }
     }
-    Error(e) -> should.fail("Failed to generate identity key pair: " <> e)
+    Error(_e) -> panic("Failed to generate identity key pair")
   }
 }
