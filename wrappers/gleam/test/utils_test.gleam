@@ -1,4 +1,4 @@
-import gleam/string
+import gleam/bit_array
 import gleeunit
 import gleeunit/should
 import signal_protocol
@@ -11,13 +11,13 @@ pub fn main() {
 pub fn test_generate_user_keys() {
   case utils.generate_user_keys() {
     Ok(#(identity_key_pair, pre_key, signed_pre_key)) -> {
-      should.equal(string.length(identity_key_pair.public_key) > 0, True)
-      should.equal(string.length(identity_key_pair.signature) > 0, True)
+      should.equal(bit_array.byte_size(identity_key_pair.public_key) > 0, True)
+      should.equal(bit_array.byte_size(identity_key_pair.signature) > 0, True)
       should.equal(pre_key.key_id, 1)
-      should.equal(string.length(pre_key.public_key) > 0, True)
+      should.equal(bit_array.byte_size(pre_key.public_key) > 0, True)
       should.equal(signed_pre_key.key_id, 1)
-      should.equal(string.length(signed_pre_key.public_key) > 0, True)
-      should.equal(string.length(signed_pre_key.signature) > 0, True)
+      should.equal(bit_array.byte_size(signed_pre_key.public_key) > 0, True)
+      should.equal(bit_array.byte_size(signed_pre_key.signature) > 0, True)
     }
     Error(e) -> should.fail("Failed to generate user keys: " <> e)
   }
@@ -27,7 +27,7 @@ pub fn test_create_user_bundle() {
   case utils.generate_user_keys() {
     Ok(#(identity_key_pair, pre_key, signed_pre_key)) -> {
       case
-        utils.create_user_bundle(1, identity_key_pair, pre_key, signed_pre_key)
+        utils.create_user_bundle(1, identity_key_pair.public_key, pre_key, signed_pre_key)
       {
         Ok(bundle) -> {
           should.equal(bundle.registration_id, 1)
@@ -64,8 +64,8 @@ pub fn test_establish_session() {
             )
           {
             Ok(#(local_session, remote_session)) -> {
-              should.equal(string.length(local_session.reference) > 0, True)
-              should.equal(string.length(remote_session.reference) > 0, True)
+              should.equal(bit_array.byte_size(local_session.reference) > 0, True)
+              should.equal(bit_array.byte_size(remote_session.reference) > 0, True)
             }
             Error(e) -> should.fail("Failed to establish session: " <> e)
           }
@@ -95,7 +95,7 @@ pub fn test_message_exchange() {
             )
           {
             Ok(#(local_session, remote_session)) -> {
-              let message = "Hello, Signal Protocol!"
+              let message = <<"Hello, Signal Protocol!":utf8>>
               case
                 utils.exchange_messages(local_session, remote_session, message)
               {
@@ -105,11 +105,11 @@ pub fn test_message_exchange() {
                   {
                     Ok(Nil) -> {
                       should.equal(
-                        string.length(new_local_session.reference) > 0,
+                        bit_array.byte_size(new_local_session.reference) > 0,
                         True,
                       )
                       should.equal(
-                        string.length(new_remote_session.reference) > 0,
+                        bit_array.byte_size(new_remote_session.reference) > 0,
                         True,
                       )
                     }
@@ -148,7 +148,7 @@ pub fn test_send_receive_with_session() {
             )
           {
             Ok(#(local_session, remote_session)) -> {
-              let message = "Hello, Signal Protocol!"
+              let message = <<"Hello, Signal Protocol!":utf8>>
               case utils.send_message_with_session(local_session, message) {
                 Ok(#(ciphertext, new_local_session)) -> {
                   case
@@ -163,11 +163,11 @@ pub fn test_send_receive_with_session() {
                       {
                         Ok(Nil) -> {
                           should.equal(
-                            string.length(new_local_session.reference) > 0,
+                            bit_array.byte_size(new_local_session.reference) > 0,
                             True,
                           )
                           should.equal(
-                            string.length(new_remote_session.reference) > 0,
+                            bit_array.byte_size(new_remote_session.reference) > 0,
                             True,
                           )
                         }

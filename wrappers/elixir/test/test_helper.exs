@@ -9,6 +9,8 @@ defmodule TestHelper do
   Helper functions for testing the LibsignalProtocol wrapper.
   """
 
+  import ExUnit.Assertions
+
   def generate_test_key(size \\ 32) do
     :crypto.strong_rand_bytes(size)
   end

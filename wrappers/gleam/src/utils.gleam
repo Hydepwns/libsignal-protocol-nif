@@ -36,7 +36,7 @@ pub fn generate_user_keys() -> Result(
 /// Creates a pre-key bundle from user keys.
 pub fn create_user_bundle(
   registration_id: Int,
-  identity_key: String,
+  identity_key: BitArray,
   pre_key: PreKey,
   signed_pre_key: SignedPreKey,
 ) -> Result(PreKeyBundle, String) {
@@ -45,18 +45,18 @@ pub fn create_user_bundle(
     identity_key,
     pre_key,
     signed_pre_key,
-    "0",
+    <<0>>,
     // Base key will be generated during session creation
   )
 }
 
 /// Establishes a session between two users using their pre-key bundles.
 pub fn establish_session(
-  local_identity_key: String,
+  local_identity_key: BitArray,
   local_registration_id: Int,
   local_pre_key: PreKey,
   local_signed_pre_key: SignedPreKey,
-  remote_identity_key: String,
+  remote_identity_key: BitArray,
   remote_registration_id: Int,
   remote_pre_key: PreKey,
   remote_signed_pre_key: SignedPreKey,
@@ -131,8 +131,8 @@ pub fn establish_session(
 /// Sends a message and returns both the ciphertext and the session.
 pub fn send_message_with_session(
   session: Session,
-  message: String,
-) -> Result(#(String, Session), String) {
+  message: BitArray,
+) -> Result(#(BitArray, Session), String) {
   case session.encrypt_message(session, message) {
     Ok(ciphertext) -> {
       Ok(#(ciphertext, session))
@@ -144,8 +144,8 @@ pub fn send_message_with_session(
 /// Receives a message and returns both the plaintext and the session.
 pub fn receive_message_with_session(
   session: Session,
-  ciphertext: String,
-) -> Result(#(String, Session), String) {
+  ciphertext: BitArray,
+) -> Result(#(BitArray, Session), String) {
   case session.decrypt_message(session, ciphertext) {
     Ok(message) -> {
       Ok(#(message, session))
@@ -158,8 +158,8 @@ pub fn receive_message_with_session(
 pub fn exchange_messages(
   local_session: Session,
   remote_session: Session,
-  message: String,
-) -> Result(#(String, Session, Session), String) {
+  message: BitArray,
+) -> Result(#(BitArray, Session, Session), String) {
   case send_message_with_session(local_session, message) {
     Ok(#(ciphertext, local_session)) -> {
       case receive_message_with_session(remote_session, ciphertext) {
@@ -175,8 +175,8 @@ pub fn exchange_messages(
 
 /// Verifies that a message exchange was successful by comparing the sent and received messages.
 pub fn verify_message_exchange(
-  sent_message: String,
-  received_message: String,
+  sent_message: BitArray,
+  received_message: BitArray,
 ) -> Result(Nil, String) {
   case sent_message == received_message {
     True -> Ok(Nil)
