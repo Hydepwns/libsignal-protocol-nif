@@ -150,6 +150,8 @@ jobs:
         ls -la priv/
         echo "NIF files built:"
         find priv/ -name "*.so" -o -name "*.dll" -o -name "*.dylib" | head -10
+        echo "Erlang beam files:"
+        find _build/ -name "*.beam" | grep libsignal | head -10
     
     - name: Test Elixir wrapper
       if: matrix.wrapper == 'elixir'
@@ -163,7 +165,9 @@ jobs:
         mix deps.get
         echo "Compiling..."
         mix compile
-        echo "Running tests..."
+        echo "Running tests with Erlang NIF module in code path..."
+        # Add the main project's beam files to the code path
+        export ERL_LIBS="../../_build/default/lib:$ERL_LIBS"
         mix test --trace
     
     - name: Test Gleam wrapper

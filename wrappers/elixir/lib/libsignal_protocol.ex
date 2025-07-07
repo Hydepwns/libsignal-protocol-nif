@@ -4,22 +4,7 @@ defmodule LibsignalProtocol do
   Provides a clean, idiomatic interface for secure messaging.
   """
 
-  @on_load :load_nif
-
-  def load_nif do
-    # Try multiple possible paths for the NIF
-    priv_dir = :code.priv_dir(:libsignal_protocol)
-    nif_name = 'libsignal_protocol_nif'
-
-    case priv_dir do
-      {:error, :bad_name} ->
-        # Fallback to relative path if priv_dir fails
-        :erlang.load_nif('./priv/libsignal_protocol_nif', 0)
-      priv_path ->
-        nif_path = :filename.join(priv_path, nif_name)
-        :erlang.load_nif(nif_path, 0)
-    end
-  end
+  # No @on_load - we'll use the existing Erlang NIF module directly
 
   @doc """
   Initializes the Signal Protocol library.
@@ -28,6 +13,9 @@ defmodule LibsignalProtocol do
   @spec init() :: :ok | {:error, String.t()}
   def init do
     try do
+      # Ensure the NIF module is loaded first
+      :code.ensure_loaded(:libsignal_protocol_nif)
+
       case :libsignal_protocol_nif.init() do
         :ok -> :ok
         {:error, reason} when is_atom(reason) -> {:error, Atom.to_string(reason)}
