@@ -10,7 +10,9 @@ RUN apk add --no-cache \
     pkgconfig \
     git \
     curl \
-    make
+    make \
+    bash \
+    findutils
 
 # Set working directory
 WORKDIR /app
@@ -20,7 +22,14 @@ COPY . .
 
 # Build stage for Erlang
 FROM base AS erlang-build
-RUN make build && make test-unit
+# Build C components first to ensure NIFs are available
+RUN cd c_src && cmake . -DCMAKE_BUILD_TYPE=Release && make && cd ..
+# Verify NIF files were created
+RUN ls -la priv/
+# Now compile Erlang components (this will trigger post_hooks but NIFs already exist)
+RUN rebar3 compile
+# Run tests
+RUN make test-unit
 
 # Build stage for Elixir
 FROM elixir:1.16-alpine AS elixir-build
