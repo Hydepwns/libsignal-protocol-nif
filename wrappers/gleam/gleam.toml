@@ -2,4 +2,7 @@ name = "libsignal_protocol_gleam"
 version = "0.1.0"
 
 [dependencies]
-gleam_stdlib = "0.38.0"
+gleam_stdlib = "0.60.0"
+
+[dev-dependencies]
+gleeunit = "1.6.0"

@@ -145,7 +145,7 @@ jobs:
     - name: Install Gleam
       if: matrix.wrapper == 'gleam'
       run: |
-        curl -sSL https://github.com/gleam-lang/gleam/releases/download/v1.7.0/gleam-v1.7.0-x86_64-unknown-linux-musl.tar.gz | tar -xz
+        curl -sSL https://github.com/gleam-lang/gleam/releases/download/v1.9.0/gleam-v1.9.0-x86_64-unknown-linux-musl.tar.gz | tar -xz
         sudo mv gleam /usr/local/bin/
         gleam --version
     
@@ -337,7 +337,7 @@ jobs:
     
     - name: Install Gleam for publishing
       run: |
-        curl -sSL https://github.com/gleam-lang/gleam/releases/download/v1.7.0/gleam-v1.7.0-x86_64-unknown-linux-musl.tar.gz | tar -xz
+        curl -sSL https://github.com/gleam-lang/gleam/releases/download/v1.9.0/gleam-v1.9.0-x86_64-unknown-linux-musl.tar.gz | tar -xz
         sudo mv gleam /usr/local/bin/
         gleam --version
     
