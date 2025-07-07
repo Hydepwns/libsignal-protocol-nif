@@ -118,7 +118,7 @@ make test-unit
    ```bash
    # Use Nix for consistent environment
    nix-shell
-   
+
    # Or install dependencies manually
    # See docs/CONTRIBUTING.md for details
    ```
@@ -136,10 +136,10 @@ make test-unit
    ```bash
    # Rebuild
    make clean && make build
-   
+
    # Run specific test suite
    make test-unit
-   
+
    # Run all tests
    make test
    ```
@@ -149,7 +149,7 @@ make test-unit
    ```bash
    # Format code
    rebar3 format
-   
+
    # Create pull request
    git add . && git commit -m "Your changes"
    git push origin your-branch
@@ -163,7 +163,7 @@ make test-unit
 
    ```erlang
    {deps, [
-       {libsignal_protocol_nif, "0.1.0"}
+       {libsignal_protocol_nif, "0.1.1"}
    ]}.
    ```
 
@@ -172,7 +172,7 @@ make test-unit
    ```elixir
    defp deps do
      [
-       {:libsignal_protocol, "~> 0.1.0"}
+       {:libsignal_protocol, "~> 0.1.1"}
      ]
    end
    ```
@@ -181,7 +181,7 @@ make test-unit
 
    ```toml
    [dependencies]
-   libsignal_protocol_gleam = "~> 0.1.0"
+   libsignal_protocol_gleam = "~> 0.1.1"
    ```
 
 2. **Basic Usage Example**
@@ -189,12 +189,12 @@ make test-unit
    ```erlang
    % Generate key pair
    {ok, {PublicKey, PrivateKey}} = signal_nif:generate_curve25519_keypair(),
-   
+
    % Sign data
    Message = <<"Hello, Signal Protocol!">>,
    {ok, {SignPublicKey, SignPrivateKey}} = signal_nif:generate_ed25519_keypair(),
    {ok, Signature} = signal_nif:sign_data(SignPrivateKey, Message),
-   
+
    % Verify signature
    ok = signal_nif:verify_signature(SignPublicKey, Message, Signature).
    ```

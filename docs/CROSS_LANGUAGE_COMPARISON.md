@@ -413,7 +413,7 @@ pub fn generate_curve25519_keypair() -> Result(KeyPair, Error) {
 
    ```elixir
    def deps do
-     [{:libsignal_protocol, "~> 0.1.0"}]
+     [{:libsignal_protocol, "~> 0.1.1"}]
    end
    ```
 
@@ -453,7 +453,7 @@ pub fn generate_curve25519_keypair() -> Result(KeyPair, Error) {
 
    ```toml
    [dependencies]
-   libsignal_protocol_gleam = "~> 0.1.0"
+   libsignal_protocol_gleam = "~> 0.1.1"
    ```
 
 2. **Update function calls:**
@@ -492,7 +492,7 @@ pub fn generate_curve25519_keypair() -> Result(KeyPair, Error) {
 
    ```erlang
    {deps, [
-       {libsignal_protocol_nif, "~> 0.1.0"}
+       {libsignal_protocol_nif, "~> 0.1.1"}
    ]}.
    ```
 

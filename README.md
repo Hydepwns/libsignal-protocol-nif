@@ -33,7 +33,7 @@ nix-shell --run "make test-unit"
 
 ```erlang
 {deps, [
-    {libsignal_protocol_nif, "0.1.0"}
+    {libsignal_protocol_nif, "0.1.1"}
 ]}.
 ```
 
@@ -45,7 +45,7 @@ nix-shell --run "make test-unit"
 ```elixir
 def deps do
   [
-    {:libsignal_protocol, "~> 0.1.0"}
+    {:libsignal_protocol, "~> 0.1.1"}
   ]
 end
 ```
@@ -57,7 +57,7 @@ end
 
 ```toml
 [dependencies]
-libsignal_protocol_gleam = "~> 0.1.0"
+libsignal_protocol_gleam = "~> 0.1.1"
 ```
 
 </details>
@@ -93,12 +93,12 @@ libsignal_protocol_gleam = "~> 0.1.0"
 
 ### System Requirements
 
-| Component | Version | Purpose |
-|-----------|---------|---------|
-| **libsodium** | 1.0.18+ | Cryptographic operations |
-| **CMake** | 3.15+ | Build system |
-| **Erlang/OTP** | 24.0+ | Runtime |
-| **GCC/Clang** | Any recent | C compiler |
+| Component      | Version    | Purpose                  |
+| -------------- | ---------- | ------------------------ |
+| **libsodium**  | 1.0.18+    | Cryptographic operations |
+| **CMake**      | 3.15+      | Build system             |
+| **Erlang/OTP** | 24.0+      | Runtime                  |
+| **GCC/Clang**  | Any recent | C compiler               |
 
 ### Platform-Specific Setup
 
@@ -224,14 +224,14 @@ make docker-test
 
 ## Documentation
 
-| Resource | Description |
-|----------|-------------|
-| [Quick Start Guide](docs/IMMEDIATE_ACTIONS.md) | Get started in 5 minutes |
-| [API Reference](docs/API.md) | Complete function documentation |
-| [Architecture](docs/ARCHITECTURE.md) | System design and internals |
-| [Security Guide](docs/SECURITY.md) | Cryptographic security considerations |
-| [Language Comparison](docs/CROSS_LANGUAGE_COMPARISON.md) | Erlang vs Elixir vs Gleam |
-| [Documentation Plan](docs/DOCUMENTATION_PLAN.md) | Comprehensive roadmap |
+| Resource                                                 | Description                           |
+| -------------------------------------------------------- | ------------------------------------- |
+| [Quick Start Guide](docs/IMMEDIATE_ACTIONS.md)           | Get started in 5 minutes              |
+| [API Reference](docs/API.md)                             | Complete function documentation       |
+| [Architecture](docs/ARCHITECTURE.md)                     | System design and internals           |
+| [Security Guide](docs/SECURITY.md)                       | Cryptographic security considerations |
+| [Language Comparison](docs/CROSS_LANGUAGE_COMPARISON.md) | Erlang vs Elixir vs Gleam             |
+| [Documentation Plan](docs/DOCUMENTATION_PLAN.md)         | Comprehensive roadmap                 |
 
 ---
 

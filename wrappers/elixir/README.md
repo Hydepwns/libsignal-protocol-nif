@@ -15,7 +15,7 @@ Add `libsignal_protocol` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:libsignal_protocol, "~> 0.1.0"}
+    {:libsignal_protocol, "~> 0.1.1"}
   ]
 end
 ```

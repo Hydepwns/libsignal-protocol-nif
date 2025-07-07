@@ -14,7 +14,7 @@ Add `libsignal_protocol_gleam` to your list of dependencies in `gleam.toml`:
 
 ```toml
 [dependencies]
-libsignal_protocol_gleam = "~> 0.1.0"
+libsignal_protocol_gleam = "~> 0.1.1"
 ```
 
 ## Quick Start
