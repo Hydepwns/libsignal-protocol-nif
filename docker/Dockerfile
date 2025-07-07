@@ -57,19 +57,22 @@ RUN cd wrappers/gleam && \
 
 # Production stage
 FROM erlang:25-alpine AS production
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl libsodium
 WORKDIR /app
+
+# Copy only the necessary files for production
 COPY --from=erlang-build /app/priv ./priv
-COPY --from=erlang-build /app/lib ./lib
-COPY --from=erlang-build /app/src ./src
-COPY --from=erlang-build /app/include ./include
+COPY --from=erlang-build /app/_build/default ./
+COPY --from=erlang-build /app/erl_src ./erl_src
 COPY --from=erlang-build /app/rebar.config ./
-COPY --from=erlang-build /app/Makefile ./
 
 # Create non-root user
 RUN addgroup -g 1000 signal && \
     adduser -D -s /bin/sh -u 1000 -G signal signal
+
+# Change ownership of app directory
+RUN chown -R signal:signal /app
 USER signal
 
 EXPOSE 8080
-CMD ["erl", "-noshell", "-s", "libsignal_protocol_nif", "start"] 
+CMD ["erl", "-noshell", "-pa", "lib/*/ebin", "-s", "libsignal_protocol_nif", "start"] 
