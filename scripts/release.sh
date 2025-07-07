@@ -101,10 +101,10 @@ make perf-test
 
 # Build Docker images
 log_info "Building Docker images..."
-docker build --target erlang-build -t "$DOCKER_IMAGE:erlang-$NEW_VERSION" .
-docker build --target elixir-build -t "$DOCKER_IMAGE:elixir-$NEW_VERSION" .
-docker build --target gleam-build -t "$DOCKER_IMAGE:gleam-$NEW_VERSION" .
-docker build --target production -t "$DOCKER_IMAGE:$NEW_VERSION" .
+docker build --target erlang-build -t "$DOCKER_IMAGE:erlang-$NEW_VERSION" -f docker/Dockerfile .
+docker build --target elixir-build -t "$DOCKER_IMAGE:elixir-$NEW_VERSION" -f docker/Dockerfile .
+docker build --target gleam-build -t "$DOCKER_IMAGE:gleam-$NEW_VERSION" -f docker/Dockerfile .
+docker build --target production -t "$DOCKER_IMAGE:$NEW_VERSION" -f docker/Dockerfile .
 docker tag "$DOCKER_IMAGE:$NEW_VERSION" "$DOCKER_IMAGE:$DOCKER_TAG"
 
 # Update changelog

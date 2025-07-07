@@ -12,10 +12,10 @@ defmodule LibsignalProtocol.PreKeyBundleTest do
     test "creates a valid pre-key bundle" do
       # Generate identity keys
       {:ok, {identity_key, _}} = :nif.generate_identity_key_pair()
-      
+
       # Generate pre-key components
       {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(12345)
-      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} = 
+      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} =
         :nif.generate_signed_pre_key(identity_key, 67890)
 
       # Create pre-key bundle
@@ -38,18 +38,18 @@ defmodule LibsignalProtocol.PreKeyBundleTest do
     test "creates bundles with different parameters" do
       {:ok, {identity_key1, _}} = :nif.generate_identity_key_pair()
       {:ok, {identity_key2, _}} = :nif.generate_identity_key_pair()
-      
+
       {:ok, {pre_key_id1, pre_key_public1}} = :nif.generate_pre_key(11111)
       {:ok, {pre_key_id2, pre_key_public2}} = :nif.generate_pre_key(22222)
-      
-      {:ok, {signed_pre_key_id1, signed_pre_key_public1, signature1}} = 
+
+      {:ok, {signed_pre_key_id1, signed_pre_key_public1, signature1}} =
         :nif.generate_signed_pre_key(identity_key1, 33333)
-      {:ok, {signed_pre_key_id2, signed_pre_key_public2, signature2}} = 
+      {:ok, {signed_pre_key_id2, signed_pre_key_public2, signature2}} =
         :nif.generate_signed_pre_key(identity_key2, 44444)
 
-      bundle1 = PreKeyBundle.create(100, 200, {pre_key_id1, pre_key_public1}, 
+      bundle1 = PreKeyBundle.create(100, 200, {pre_key_id1, pre_key_public1},
                                    {signed_pre_key_id1, signed_pre_key_public1, signature1}, identity_key1)
-      bundle2 = PreKeyBundle.create(300, 400, {pre_key_id2, pre_key_public2}, 
+      bundle2 = PreKeyBundle.create(300, 400, {pre_key_id2, pre_key_public2},
                                    {signed_pre_key_id2, signed_pre_key_public2, signature2}, identity_key2)
 
       assert bundle1 != bundle2
@@ -62,17 +62,17 @@ defmodule LibsignalProtocol.PreKeyBundleTest do
     test "handles edge cases" do
       {:ok, {identity_key, _}} = :nif.generate_identity_key_pair()
       {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(0)
-      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} = 
+      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} =
         :nif.generate_signed_pre_key(identity_key, 0)
 
       # Test with zero values
-      bundle = PreKeyBundle.create(0, 0, {pre_key_id, pre_key_public}, 
+      bundle = PreKeyBundle.create(0, 0, {pre_key_id, pre_key_public},
                                   {signed_pre_key_id, signed_pre_key_public, signature}, identity_key)
       assert bundle.registration_id == 0
       assert bundle.device_id == 0
 
       # Test with large values
-      large_bundle = PreKeyBundle.create(16#FFFFFFFF, 16#FFFFFFFF, {pre_key_id, pre_key_public}, 
+      large_bundle = PreKeyBundle.create(16#FFFFFFFF, 16#FFFFFFFF, {pre_key_id, pre_key_public},
                                         {signed_pre_key_id, signed_pre_key_public, signature}, identity_key)
       assert large_bundle.registration_id == 16#FFFFFFFF
       assert large_bundle.device_id == 16#FFFFFFFF
@@ -83,11 +83,11 @@ defmodule LibsignalProtocol.PreKeyBundleTest do
     test "parses valid pre-key bundle binary" do
       {:ok, {identity_key, _}} = :nif.generate_identity_key_pair()
       {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(12345)
-      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} = 
+      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} =
         :nif.generate_signed_pre_key(identity_key, 67890)
 
       # Create bundle
-      bundle = PreKeyBundle.create(123, 456, {pre_key_id, pre_key_public}, 
+      bundle = PreKeyBundle.create(123, 456, {pre_key_id, pre_key_public},
                                   {signed_pre_key_id, signed_pre_key_public, signature}, identity_key)
 
       # Convert to binary format (simulate what would be sent over network)
@@ -112,8 +112,8 @@ defmodule LibsignalProtocol.PreKeyBundleTest do
         :erlang.term_to_binary({invalid, data}),
         :erlang.term_to_binary([]),
         :erlang.term_to_binary(123),
-        <<0:1024>>,  # Large zero-filled binary
-        <<255:1024>> # Large filled binary
+        :crypto.strong_rand_bytes(128),  # Large zero-filled binary
+        :crypto.strong_rand_bytes(128)   # Large filled binary
       ]
 
       Enum.each(invalid_binaries, fn invalid_binary ->
@@ -127,13 +127,13 @@ defmodule LibsignalProtocol.PreKeyBundleTest do
     test "parses bundles with different structures" do
       {:ok, {identity_key, _}} = :nif.generate_identity_key_pair()
       {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(12345)
-      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} = 
+      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} =
         :nif.generate_signed_pre_key(identity_key, 67890)
 
       # Test different bundle structures
-      bundle1 = PreKeyBundle.create(100, 200, {pre_key_id, pre_key_public}, 
+      bundle1 = PreKeyBundle.create(100, 200, {pre_key_id, pre_key_public},
                                    {signed_pre_key_id, signed_pre_key_public, signature}, identity_key)
-      bundle2 = PreKeyBundle.create(300, 400, {pre_key_id, pre_key_public}, 
+      bundle2 = PreKeyBundle.create(300, 400, {pre_key_id, pre_key_public},
                                    {signed_pre_key_id, signed_pre_key_public, signature}, identity_key)
 
       binary1 = :erlang.term_to_binary(bundle1)
@@ -153,10 +153,10 @@ defmodule LibsignalProtocol.PreKeyBundleTest do
     test "verifies valid signatures" do
       {:ok, {identity_key, _}} = :nif.generate_identity_key_pair()
       {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(12345)
-      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} = 
+      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} =
         :nif.generate_signed_pre_key(identity_key, 67890)
 
-      bundle = PreKeyBundle.create(123, 456, {pre_key_id, pre_key_public}, 
+      bundle = PreKeyBundle.create(123, 456, {pre_key_id, pre_key_public},
                                   {signed_pre_key_id, signed_pre_key_public, signature}, identity_key)
 
       case PreKeyBundle.verify_signature(bundle) do
@@ -169,10 +169,10 @@ defmodule LibsignalProtocol.PreKeyBundleTest do
     test "rejects invalid signatures" do
       {:ok, {identity_key, _}} = :nif.generate_identity_key_pair()
       {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(12345)
-      
+
       # Create bundle with invalid signature
       invalid_signature = "invalid_signature"
-      bundle = PreKeyBundle.create(123, 456, {pre_key_id, pre_key_public}, 
+      bundle = PreKeyBundle.create(123, 456, {pre_key_id, pre_key_public},
                                   {67890, pre_key_public, invalid_signature}, identity_key)
 
       case PreKeyBundle.verify_signature(bundle) do
@@ -188,9 +188,9 @@ defmodule LibsignalProtocol.PreKeyBundleTest do
         %{registration_id: 123},
         %{registration_id: 123, device_id: 456},
         %{registration_id: 123, device_id: 456, pre_key: {0, "invalid"}},
-        %{registration_id: 123, device_id: 456, pre_key: {0, "invalid"}, 
+        %{registration_id: 123, device_id: 456, pre_key: {0, "invalid"},
           signed_pre_key: {0, "invalid", "invalid"}},
-        %{registration_id: 123, device_id: 456, pre_key: {0, "invalid"}, 
+        %{registration_id: 123, device_id: 456, pre_key: {0, "invalid"},
           signed_pre_key: {0, "invalid", "invalid"}, identity_key: "invalid"}
       ]
 
@@ -208,11 +208,11 @@ defmodule LibsignalProtocol.PreKeyBundleTest do
     test "full bundle lifecycle" do
       {:ok, {identity_key, _}} = :nif.generate_identity_key_pair()
       {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(12345)
-      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} = 
+      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} =
         :nif.generate_signed_pre_key(identity_key, 67890)
 
       # Create bundle
-      bundle = PreKeyBundle.create(123, 456, {pre_key_id, pre_key_public}, 
+      bundle = PreKeyBundle.create(123, 456, {pre_key_id, pre_key_public},
                                   {signed_pre_key_id, signed_pre_key_public, signature}, identity_key)
 
       # Verify signature
@@ -242,7 +242,7 @@ defmodule LibsignalProtocol.PreKeyBundleTest do
       # Generate pre-key components for each
       bundles = Enum.map([identity_key1, identity_key2, identity_key3], fn identity_key ->
         {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(:rand.uniform(100000))
-        {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} = 
+        {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} =
           :nif.generate_signed_pre_key(identity_key, :rand.uniform(100000))
 
         PreKeyBundle.create(
@@ -260,7 +260,7 @@ defmodule LibsignalProtocol.PreKeyBundleTest do
       # Test parse and verify for each bundle
       Enum.each(bundles, fn bundle ->
         bundle_binary = :erlang.term_to_binary(bundle)
-        
+
         case PreKeyBundle.parse(bundle_binary) do
           {:ok, parsed_bundle} ->
             assert parsed_bundle.registration_id == bundle.registration_id
@@ -317,11 +317,11 @@ defmodule LibsignalProtocol.PreKeyBundleTest do
     test "handles large data" do
       {:ok, {identity_key, _}} = :nif.generate_identity_key_pair()
       {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(12345)
-      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} = 
+      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} =
         :nif.generate_signed_pre_key(identity_key, 67890)
 
       # Test with large registration and device IDs
-      bundle = PreKeyBundle.create(16#FFFFFFFF, 16#FFFFFFFF, {pre_key_id, pre_key_public}, 
+      bundle = PreKeyBundle.create(16#FFFFFFFF, 16#FFFFFFFF, {pre_key_id, pre_key_public},
                                   {signed_pre_key_id, signed_pre_key_public, signature}, identity_key)
 
       assert bundle.registration_id == 16#FFFFFFFF
@@ -337,4 +337,4 @@ defmodule LibsignalProtocol.PreKeyBundleTest do
       end
     end
   end
-end 
+end

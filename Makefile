@@ -198,10 +198,10 @@ install: build
 # Docker targets
 docker-build:
 	@echo "Building Docker images..."
-	docker build --target erlang-build -t libsignal-protocol-nif:erlang .
-	docker build --target elixir-build -t libsignal-protocol-nif:elixir .
-	docker build --target gleam-build -t libsignal-protocol-nif:gleam .
-	docker build --target production -t libsignal-protocol-nif:latest .
+	docker build --target erlang-build -t libsignal-protocol-nif:erlang -f docker/Dockerfile .
+	docker build --target elixir-build -t libsignal-protocol-nif:elixir -f docker/Dockerfile .
+	docker build --target gleam-build -t libsignal-protocol-nif:gleam -f docker/Dockerfile .
+	docker build --target production -t libsignal-protocol-nif:latest -f docker/Dockerfile .
 
 docker-test:
 	@echo "Running tests in Docker..."
