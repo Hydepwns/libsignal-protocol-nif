@@ -75,8 +75,8 @@ defmodule SignalProtocol.Session do
   """
   def create_and_process_bundle(local_identity_key, remote_identity_key, bundle)
       when is_binary(local_identity_key) and
-           is_binary(remote_identity_key) and
-           is_binary(bundle) do
+             is_binary(remote_identity_key) and
+             is_binary(bundle) do
     with {:ok, session} <- create(local_identity_key, remote_identity_key),
          {:ok, _, _} <- process_pre_key_bundle(session, bundle) do
       {:ok, session}
@@ -110,4 +110,4 @@ defmodule SignalProtocol.Session do
       when is_reference(session) and is_binary(ciphertext) do
     decrypt_message(session, ciphertext)
   end
-end 
+end

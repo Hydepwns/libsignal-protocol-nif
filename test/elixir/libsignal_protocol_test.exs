@@ -39,4 +39,4 @@ defmodule LibsignalProtocolTest do
       assert {:error, _} = LibsignalProtocol.decrypt_message(123, "test")
     end
   end
-end 
+end

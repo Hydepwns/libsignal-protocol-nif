@@ -18,7 +18,8 @@ defmodule LibsignalProtocol.MixProject do
       ],
       docs: [output: "tmp/doc"],
       aliases: aliases(),
-      description: "High-performance Elixir wrapper for Signal Protocol cryptographic primitives with libsodium. Provides idiomatic APIs for key generation, digital signatures, encryption, and session management.",
+      description:
+        "High-performance Elixir wrapper for Signal Protocol cryptographic primitives with libsodium. Provides idiomatic APIs for key generation, digital signatures, encryption, and session management.",
       package: package(),
       source_url: "https://github.com/hydepwns/libsignal-protocol-nif",
       homepage_url: "https://hex.pm/packages/libsignal_protocol"
@@ -32,7 +33,18 @@ defmodule LibsignalProtocol.MixProject do
       links: %{"GitHub" => "https://github.com/hydepwns/libsignal-protocol-nif"},
       files: ~w(lib mix.exs README.md LICENSE),
       maintainers: ["hydepwns"],
-      keywords: ["signal", "protocol", "cryptography", "encryption", "security", "nif", "libsodium", "curve25519", "ed25519", "aes-gcm"]
+      keywords: [
+        "signal",
+        "protocol",
+        "cryptography",
+        "encryption",
+        "security",
+        "nif",
+        "libsodium",
+        "curve25519",
+        "ed25519",
+        "aes-gcm"
+      ]
     ]
   end
 

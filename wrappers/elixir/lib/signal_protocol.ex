@@ -29,6 +29,7 @@ defmodule SignalProtocol do
     case :libsignal_protocol_nif.generate_identity_key_pair() do
       {:ok, {public_key, signature}} ->
         {:ok, {public_key, signature}}
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -43,6 +44,7 @@ defmodule SignalProtocol do
     case :libsignal_protocol_nif.generate_pre_key(key_id) do
       {:ok, {key_id, public_key}} ->
         {:ok, {key_id, public_key}}
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -58,6 +60,7 @@ defmodule SignalProtocol do
     case :libsignal_protocol_nif.generate_signed_pre_key(identity_key, key_id) do
       {:ok, {key_id, public_key, signature}} ->
         {:ok, {key_id, public_key, signature}}
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -74,6 +77,7 @@ defmodule SignalProtocol do
     case :libsignal_protocol_nif.create_session(local_identity_key, remote_identity_key) do
       {:ok, session} ->
         {:ok, session}
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -102,6 +106,7 @@ defmodule SignalProtocol do
     case :libsignal_protocol_nif.encrypt_message(session, message) do
       {:ok, ciphertext} ->
         {:ok, ciphertext}
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -117,6 +122,7 @@ defmodule SignalProtocol do
     case :libsignal_protocol_nif.decrypt_message(session, ciphertext) do
       {:ok, plaintext} ->
         {:ok, plaintext}
+
       {:error, reason} ->
         {:error, reason}
     end
@@ -170,4 +176,4 @@ defmodule SignalProtocol do
     result = decrypt_message(session, ciphertext)
     {:reply, result, state}
   end
-end 
+end

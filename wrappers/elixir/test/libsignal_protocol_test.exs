@@ -7,6 +7,7 @@ defmodule LibsignalProtocolTest do
       case LibsignalProtocol.init() do
         :ok ->
           assert true
+
         {:error, reason} ->
           # For now, we'll accept NIF loading errors as the test environment might not have the NIF
           IO.puts("NIF init failed (expected in test environment): #{reason}")
@@ -23,6 +24,7 @@ defmodule LibsignalProtocolTest do
           assert is_binary(signature)
           assert byte_size(public_key) > 0
           assert byte_size(signature) > 0
+
         {:error, reason} ->
           # Accept errors if NIF is not properly loaded in test environment
           IO.puts("Key generation failed (expected if NIF not loaded): #{reason}")
@@ -40,6 +42,7 @@ defmodule LibsignalProtocolTest do
         {:ok, session} ->
           assert is_binary(session)
           assert byte_size(session) > 0
+
         {:error, reason} ->
           # Accept errors if NIF is not properly loaded in test environment
           IO.puts("Session creation failed (expected if NIF not loaded): #{reason}")
@@ -56,6 +59,7 @@ defmodule LibsignalProtocolTest do
         {:ok, session} ->
           assert is_binary(session)
           assert byte_size(session) > 0
+
         {:error, reason} ->
           # Accept errors if NIF is not properly loaded in test environment
           IO.puts("Session creation failed (expected if NIF not loaded): #{reason}")
@@ -64,12 +68,14 @@ defmodule LibsignalProtocolTest do
     end
 
     test "fails gracefully with invalid key size" do
-      invalid_key = :crypto.strong_rand_bytes(16) # Wrong size
+      # Wrong size
+      invalid_key = :crypto.strong_rand_bytes(16)
 
       case LibsignalProtocol.create_session(invalid_key) do
         {:ok, _session} ->
           # If it succeeds, that's unexpected but not necessarily wrong
           assert true
+
         {:error, reason} ->
           # This is expected - either due to invalid key size or NIF not loaded
           assert is_binary(reason)

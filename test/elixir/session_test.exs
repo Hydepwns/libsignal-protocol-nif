@@ -17,7 +17,7 @@ defmodule LibsignalProtocol.SessionTest do
 
       # Create session
       {:ok, session} = Session.create(local_identity_key, remote_identity_key)
-      
+
       assert is_map(session)
       assert Map.has_key?(session, :id)
       assert Map.has_key?(session, :local_identity_key)
@@ -45,10 +45,12 @@ defmodule LibsignalProtocol.SessionTest do
 
     test "handles invalid identity keys gracefully" do
       invalid_key = "invalid_key"
-      
+
       case Session.create(invalid_key, invalid_key) do
-        {:error, _} -> :ok
-        {:ok, session} -> 
+        {:error, _} ->
+          :ok
+
+        {:ok, session} ->
           assert is_map(session)
           assert Map.has_key?(session, :id)
       end
@@ -66,7 +68,8 @@ defmodule LibsignalProtocol.SessionTest do
 
       # Generate pre-key bundle components
       {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(12345)
-      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} = 
+
+      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} =
         :nif.generate_signed_pre_key(remote_identity_key, 67890)
 
       # Create pre-key bundle
@@ -86,6 +89,7 @@ defmodule LibsignalProtocol.SessionTest do
           assert updated_session.signed_pre_key_id == signed_pre_key_id
           assert is_binary(updated_session.ephemeral_key)
           assert is_binary(updated_session.chain_key)
+
         {:error, reason} ->
           # Some implementations might fail due to signature verification
           assert is_atom(reason) or is_binary(reason)
@@ -122,7 +126,8 @@ defmodule LibsignalProtocol.SessionTest do
 
       # Generate pre-key bundle components
       {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(12345)
-      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} = 
+
+      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} =
         :nif.generate_signed_pre_key(remote_identity_key, 67890)
 
       # Create pre-key bundle
@@ -139,15 +144,20 @@ defmodule LibsignalProtocol.SessionTest do
         {:ok, established_session} ->
           # Test message encryption
           message = "Hello, Signal Protocol!"
+
           case Session.encrypt_message(established_session, message) do
             {:ok, encrypted_message, updated_session} ->
               assert is_binary(encrypted_message)
               assert byte_size(encrypted_message) > byte_size(message)
               assert is_map(updated_session)
               assert updated_session.message_counter > established_session.message_counter
-            {:error, _} -> :ok
+
+            {:error, _} ->
+              :ok
           end
-        {:error, _} -> :ok
+
+        {:error, _} ->
+          :ok
       end
     end
 
@@ -158,7 +168,8 @@ defmodule LibsignalProtocol.SessionTest do
 
       # Generate pre-key bundle components
       {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(12345)
-      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} = 
+
+      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} =
         :nif.generate_signed_pre_key(remote_identity_key, 67890)
 
       bundle = %{
@@ -173,14 +184,18 @@ defmodule LibsignalProtocol.SessionTest do
         {:ok, established_session} ->
           message1 = "First message"
           message2 = "Second message"
-          
+
           case {Session.encrypt_message(established_session, message1),
                 Session.encrypt_message(established_session, message2)} do
             {{:ok, encrypted1, _}, {:ok, encrypted2, _}} ->
               assert encrypted1 != encrypted2
-            _ -> :ok
+
+            _ ->
+              :ok
           end
-        {:error, _} -> :ok
+
+        {:error, _} ->
+          :ok
       end
     end
 
@@ -191,7 +206,8 @@ defmodule LibsignalProtocol.SessionTest do
 
       # Generate pre-key bundle components
       {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(12345)
-      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} = 
+
+      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} =
         :nif.generate_signed_pre_key(remote_identity_key, 67890)
 
       bundle = %{
@@ -208,17 +224,24 @@ defmodule LibsignalProtocol.SessionTest do
           case Session.encrypt_message(established_session, "") do
             {:ok, encrypted_empty, _} ->
               assert is_binary(encrypted_empty)
-            {:error, _} -> :ok
+
+            {:error, _} ->
+              :ok
           end
 
           # Test large message
           large_message = String.duplicate("A", 1000)
+
           case Session.encrypt_message(established_session, large_message) do
             {:ok, encrypted_large, _} ->
               assert is_binary(encrypted_large)
-            {:error, _} -> :ok
+
+            {:error, _} ->
+              :ok
           end
-        {:error, _} -> :ok
+
+        {:error, _} ->
+          :ok
       end
     end
   end
@@ -231,7 +254,8 @@ defmodule LibsignalProtocol.SessionTest do
 
       # Generate pre-key bundle components
       {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(12345)
-      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} = 
+
+      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} =
         :nif.generate_signed_pre_key(remote_identity_key, 67890)
 
       bundle = %{
@@ -245,17 +269,23 @@ defmodule LibsignalProtocol.SessionTest do
       case Session.process_pre_key_bundle(session, bundle) do
         {:ok, established_session} ->
           original_message = "Test message for decryption"
-          
+
           case Session.encrypt_message(established_session, original_message) do
             {:ok, encrypted_message, updated_session} ->
               case Session.decrypt_message(updated_session, encrypted_message) do
                 {:ok, decrypted_message, _} ->
                   assert decrypted_message == original_message
-                {:error, _} -> :ok
+
+                {:error, _} ->
+                  :ok
               end
-            {:error, _} -> :ok
+
+            {:error, _} ->
+              :ok
           end
-        {:error, _} -> :ok
+
+        {:error, _} ->
+          :ok
       end
     end
 
@@ -265,7 +295,7 @@ defmodule LibsignalProtocol.SessionTest do
       {:ok, session} = Session.create(local_identity_key, remote_identity_key)
 
       invalid_encrypted = "invalid_encrypted_message"
-      
+
       case Session.decrypt_message(session, invalid_encrypted) do
         {:error, _} -> :ok
         {:ok, _, _} -> :ok
@@ -280,7 +310,8 @@ defmodule LibsignalProtocol.SessionTest do
 
       # Generate pre-key bundle components
       {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(12345)
-      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} = 
+
+      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} =
         :nif.generate_signed_pre_key(remote_identity_key, 67890)
 
       bundle = %{
@@ -297,7 +328,9 @@ defmodule LibsignalProtocol.SessionTest do
           assert Map.has_key?(session, :id)
           assert Map.has_key?(session, :pre_key_id)
           assert Map.has_key?(session, :signed_pre_key_id)
-        {:error, _} -> :ok
+
+        {:error, _} ->
+          :ok
       end
     end
   end
@@ -310,7 +343,8 @@ defmodule LibsignalProtocol.SessionTest do
 
       # Generate pre-key bundle components
       {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(12345)
-      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} = 
+
+      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} =
         :nif.generate_signed_pre_key(remote_identity_key, 67890)
 
       bundle = %{
@@ -324,14 +358,18 @@ defmodule LibsignalProtocol.SessionTest do
       case Session.process_pre_key_bundle(session, bundle) do
         {:ok, established_session} ->
           message = "Hello from sender!"
-          
+
           case Session.send_message(established_session, message) do
             {:ok, encrypted_message, updated_session} ->
               assert is_binary(encrypted_message)
               assert is_map(updated_session)
-            {:error, _} -> :ok
+
+            {:error, _} ->
+              :ok
           end
-        {:error, _} -> :ok
+
+        {:error, _} ->
+          :ok
       end
     end
   end
@@ -344,7 +382,8 @@ defmodule LibsignalProtocol.SessionTest do
 
       # Generate pre-key bundle components
       {:ok, {pre_key_id, pre_key_public}} = :nif.generate_pre_key(12345)
-      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} = 
+
+      {:ok, {signed_pre_key_id, signed_pre_key_public, signature}} =
         :nif.generate_signed_pre_key(remote_identity_key, 67890)
 
       bundle = %{
@@ -358,18 +397,24 @@ defmodule LibsignalProtocol.SessionTest do
       case Session.process_pre_key_bundle(session, bundle) do
         {:ok, established_session} ->
           original_message = "Hello from sender!"
-          
+
           case Session.encrypt_message(established_session, original_message) do
             {:ok, encrypted_message, updated_session} ->
               case Session.receive_message(updated_session, encrypted_message) do
                 {:ok, decrypted_message, _} ->
                   assert decrypted_message == original_message
-                {:error, _} -> :ok
+
+                {:error, _} ->
+                  :ok
               end
-            {:error, _} -> :ok
+
+            {:error, _} ->
+              :ok
           end
-        {:error, _} -> :ok
+
+        {:error, _} ->
+          :ok
       end
     end
   end
-end 
+end

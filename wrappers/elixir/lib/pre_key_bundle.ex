@@ -21,36 +21,51 @@ defmodule SignalProtocol.PreKeyBundle do
   """
   def create(registration_id, identity_key, pre_key, signed_pre_key, base_key)
       when is_integer(registration_id) and
-           is_binary(identity_key) and
-           tuple_size(pre_key) == 2 and
-           tuple_size(signed_pre_key) == 3 and
-           is_binary(base_key) do
+             is_binary(identity_key) and
+             tuple_size(pre_key) == 2 and
+             tuple_size(signed_pre_key) == 3 and
+             is_binary(base_key) do
     {pre_key_id, pre_key_public} = pre_key
     {signed_pre_key_id, signed_pre_key_public, signed_pre_key_signature} = signed_pre_key
 
     # Calculate bundle size for validation (internal use only)
-    _bundle_size = 1 + # version
-                  4 + # registration_id
-                  4 + # pre_key_id
-                  4 + # signed_pre_key_id
-                  byte_size(identity_key) +
-                  byte_size(pre_key_public) +
-                  byte_size(signed_pre_key_public) +
-                  byte_size(signed_pre_key_signature) +
-                  byte_size(base_key)
+    # version
+    # registration_id
+    # pre_key_id
+    # signed_pre_key_id
+    _bundle_size =
+      1 +
+        4 +
+        4 +
+        4 +
+        byte_size(identity_key) +
+        byte_size(pre_key_public) +
+        byte_size(signed_pre_key_public) +
+        byte_size(signed_pre_key_signature) +
+        byte_size(base_key)
 
     # Create bundle
-    bundle = :binary.bin_to_list(<<
-      1::8,                    # version
-      registration_id::32,     # registration_id
-      pre_key_id::32,         # pre_key_id
-      signed_pre_key_id::32,  # signed_pre_key_id
-      identity_key::binary,   # identity_key
-      pre_key_public::binary, # pre_key_public
-      signed_pre_key_public::binary,  # signed_pre_key_public
-      signed_pre_key_signature::binary, # signed_pre_key_signature
-      base_key::binary        # base_key
-    >>)
+    bundle =
+      :binary.bin_to_list(<<
+        # version
+        1::8,
+        # registration_id
+        registration_id::32,
+        # pre_key_id
+        pre_key_id::32,
+        # signed_pre_key_id
+        signed_pre_key_id::32,
+        # identity_key
+        identity_key::binary,
+        # pre_key_public
+        pre_key_public::binary,
+        # signed_pre_key_public
+        signed_pre_key_public::binary,
+        # signed_pre_key_signature
+        signed_pre_key_signature::binary,
+        # base_key
+        base_key::binary
+      >>)
 
     {:ok, :binary.list_to_bin(bundle)}
   end
@@ -75,17 +90,18 @@ defmodule SignalProtocol.PreKeyBundle do
         base_key::binary-size(32)
       >> = bundle
 
-      {:ok, %{
-        version: version,
-        registration_id: registration_id,
-        pre_key_id: pre_key_id,
-        signed_pre_key_id: signed_pre_key_id,
-        identity_key: identity_key,
-        pre_key_public: pre_key_public,
-        signed_pre_key_public: signed_pre_key_public,
-        signed_pre_key_signature: signed_pre_key_signature,
-        base_key: base_key
-      }}
+      {:ok,
+       %{
+         version: version,
+         registration_id: registration_id,
+         pre_key_id: pre_key_id,
+         signed_pre_key_id: signed_pre_key_id,
+         identity_key: identity_key,
+         pre_key_public: pre_key_public,
+         signed_pre_key_public: signed_pre_key_public,
+         signed_pre_key_signature: signed_pre_key_signature,
+         base_key: base_key
+       }}
     rescue
       _ -> {:error, :invalid_bundle}
     end
@@ -106,8 +122,9 @@ defmodule SignalProtocol.PreKeyBundle do
         else
           {:error, :invalid_signature}
         end
+
       {:error, reason} ->
         {:error, reason}
     end
   end
-end 
+end

@@ -287,8 +287,8 @@ defmodule LibsignalProtocol.PreKeyBundleTest do
         :erlang.term_to_binary([]),
         :erlang.term_to_binary(123),
         :erlang.term_to_binary("string"),
-        <<0:8>>,
-        <<255:8>>,
+        <<0::8>>,
+        <<255::8>>,
         :erlang.term_to_binary(%{invalid: "data"})
       ]
 
